@@ -1,0 +1,30 @@
+services:
+  fourier-sof-2d:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ubuntu-pcl-dev:20.04
+    container_name: fourier-sof-2d
+    volumes:
+      # Mount source code directory
+      - ./src:/workspace/src
+      # Mount input files directory (PCD files, images, etc.)
+      - ./input:/workspace/input
+      # Mount output directory (CSV files, processed images, etc.)
+      - ./output:/workspace/output
+    working_dir: /workspace
+    # Keep container running for interactive development
+    stdin_open: true
+    tty: true
+    
+    # Optional: Set environment variables
+    # environment:
+    #  - DISPLAY=${DISPLAY:-:0}
+    # Optional: For GUI applications (uncomment if needed)
+    # network_mode: host
+    # volumes:
+    #   - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    #   - ${HOME}/.Xauthority:/root/.Xauthority:rw
+    
+    # Restart policy
+    restart: unless-stopped
