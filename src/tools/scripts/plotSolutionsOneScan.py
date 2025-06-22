@@ -4,6 +4,7 @@ os.environ['MPLBACKEND'] = 'Agg'
 os.environ['DISPLAY'] = ''
 
 import numpy as np
+import pandas as pd
 import cv2
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
@@ -42,16 +43,36 @@ def main():
     # Ensure output directory exists
     os.makedirs(name_of_folder, exist_ok=True)
     
-    # Read magnitude and phase data for FFT
-    magnitude_fftw1 = np.loadtxt(f"{name_of_folder}/magnitudeFFTW1.csv", delimiter=',')
+    # Read data from consolidated CSV files
+    try:
+        rotation_data = pd.read_csv(f"{name_of_folder}/rotation_analysis_results.csv")
+        registration_data = pd.read_csv(f"{name_of_folder}/registration_results.csv")
+        transformation_data = pd.read_csv(f"{name_of_folder}/registration_solutions_transformation.csv")
+    except FileNotFoundError as e:
+        print(f"Error: Required CSV file not found: {e}")
+        print("Make sure the C++ program has been run with debug=true to generate the CSV files.")
+        return
+    except Exception as e:
+        print(f"Error reading CSV files: {e}")
+        return
+    
+    # Extract data from CSV files
+    magnitude_fftw1 = rotation_data['magnitudeFFTW1'].dropna().values
+    phase_fftw1 = rotation_data['phaseFFTW1'].dropna().values
+    voxel_data_used1 = rotation_data['voxelDataFFTW1'].dropna().values
+    magnitude_fftw2 = rotation_data['magnitudeFFTW2'].dropna().values
+    phase_fftw2 = rotation_data['phaseFFTW2'].dropna().values
+    voxel_data_used2 = rotation_data['voxelDataFFTW2'].dropna().values
+    resampled_data_sphere1 = rotation_data['resampledVoxel1'].dropna().values
+    resampled_data_sphere2 = rotation_data['resampledVoxel2'].dropna().values
+    correlation_of_angles = rotation_data['resultingCorrelation1D'].dropna().values
+    
+    # Get solution info from registration results
+    number_of_solutions = int(registration_data['numberOfSolutions'].iloc[0])
+    best_solution = int(registration_data['indexOfBestSolution'].iloc[0]) + 1  # MATLAB 1-indexed
+    
+    # Calculate N from data size
     N = int(np.sqrt(len(magnitude_fftw1)))
-    
-    phase_fftw1 = np.loadtxt(f"{name_of_folder}/phaseFFTW1.csv", delimiter=',')
-    voxel_data_used1 = np.loadtxt(f"{name_of_folder}/voxelDataFFTW1.csv", delimiter=',')
-    
-    magnitude_fftw2 = np.loadtxt(f"{name_of_folder}/magnitudeFFTW2.csv", delimiter=',')
-    phase_fftw2 = np.loadtxt(f"{name_of_folder}/phaseFFTW2.csv", delimiter=',')
-    voxel_data_used2 = np.loadtxt(f"{name_of_folder}/voxelDataFFTW2.csv", delimiter=',')
     
     # Initialize matrices
     magnitude1 = np.zeros((N, N))
@@ -61,7 +82,7 @@ def main():
     phase2 = np.zeros((N, N))
     voxel_data2 = np.zeros((N, N))
     
-    # Reshape data from 1D to 2D (MATLAB indexing conversion)
+    # Reshape data from 1D to 2D (change MATLAB indexing conversion to numpy and OpenCV version)
     for j in range(N):
         for k in range(N):
             magnitude1[j,k] = magnitude_fftw1[k * N - N + j]
@@ -117,10 +138,7 @@ def main():
     plt.savefig(f"{name_of_folder}/voxel_data2.png", dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Read resampled sphere data
-    resampled_data_sphere1 = np.loadtxt(f"{name_of_folder}/resampledVoxel1.csv", delimiter=',')
-    resampled_data_sphere2 = np.loadtxt(f"{name_of_folder}/resampledVoxel2.csv", delimiter=',')
-    
+    # Process resampled sphere data
     resampled_sphere_result1 = np.zeros((N, N))
     resampled_sphere_result2 = np.zeros((N, N))
     
@@ -188,7 +206,6 @@ def main():
         plt.close()
     
     # Save Figure 7: Correlation of Angles
-    correlation_of_angles = np.loadtxt(f"{name_of_folder}/resultingCorrelation1D.csv", delimiter=',')
     angles_x = np.linspace(0, 2 * np.pi, len(correlation_of_angles))
     
     # Find peaks
@@ -206,29 +223,25 @@ def main():
     plt.savefig(f"{name_of_folder}/correlation_angles.png", dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Read data information
-    data_information = np.loadtxt(f"{name_of_folder}/dataForReadIn.csv", delimiter=',')
-    number_of_solutions = int(data_information[0])
-    best_solution = int(data_information[1])+1 # MATLAB figures are 1-indexed
-    
     # Save Figure 8: Correlation matrices for all solutions
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     axes = axes.flatten()
     
     for i in range(number_of_solutions):
-        correlation_matrix_shift_1d = np.loadtxt(
-            f"{name_of_folder}/resultingCorrelationShift{i}.csv", delimiter=','
-        )
-        result_size = int(np.round(len(correlation_matrix_shift_1d) ** (1/2)))
-        correlation_matrix_shift_2d = correlation_matrix_shift_1d.reshape(result_size, result_size)
-        
-        X, Y = np.meshgrid(range(result_size), range(result_size))
-        
-        if i < len(axes):
-            im = axes[i].imshow(correlation_matrix_shift_2d, cmap='viridis')
-            axes[i].set_title(f'Solution {i+1}')
-            axes[i].set_aspect('equal')
-            plt.colorbar(im, ax=axes[i])
+        correlation_column = f"resultingCorrelationShift{i}"
+        if correlation_column in registration_data.columns:
+            correlation_matrix_shift_1d = registration_data[correlation_column].dropna().values
+            
+            result_size = int(np.round(len(correlation_matrix_shift_1d) ** (1/2)))
+            correlation_matrix_shift_2d = correlation_matrix_shift_1d.reshape(result_size, result_size)
+            
+            if i < len(axes):
+                im = axes[i].imshow(correlation_matrix_shift_2d, cmap='viridis')
+                axes[i].set_title(f'Solution {i+1}')
+                axes[i].set_aspect('equal')
+                plt.colorbar(im, ax=axes[i])
+        else:
+            print(f"Warning: Column {correlation_column} not found in registration_results.csv")
     
     plt.tight_layout()
     plt.savefig(f"{name_of_folder}/correlation_matrices.png", dpi=300, bbox_inches='tight')
@@ -239,41 +252,97 @@ def main():
     axes = axes.flatten()
     
     for i in range(number_of_solutions):
-        result_voxel1_tmp = np.loadtxt(f"{name_of_folder}/resultVoxel1{i}.csv", delimiter=',')
-        result_voxel2_tmp = np.loadtxt(f"{name_of_folder}/resultVoxel2{i}.csv", delimiter=',')
+        voxel1_column = f"resultVoxel1{i}"
+        voxel2_column = f"resultVoxel2{i}"
         
-        voxel_result1 = np.zeros((N, N))
-        voxel_result2 = np.zeros((N, N))
-        
-        for j in range(N):
-            for k in range(N):
-                voxel_result1[j,k] = result_voxel1_tmp[k * N - N + j]
-                voxel_result2[j,k] = result_voxel2_tmp[k * N - N + j]
-        
-        # Normalize data for blending
-        voxel1_norm = cv2.normalize(voxel_result1.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
-        voxel2_norm = cv2.normalize(voxel_result2.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
-        
-        # Convert to 3-channel for color blending
-        voxel1_color = cv2.applyColorMap(voxel1_norm.astype(np.uint8), cv2.COLORMAP_JET)
-        voxel2_color = cv2.applyColorMap(voxel2_norm.astype(np.uint8), cv2.COLORMAP_VIRIDIS)
-        
-        # Blend the images
-        blended = cv2.addWeighted(voxel1_color, 0.5, voxel2_color, 0.5, 0)
-        
-        if i < len(axes):
-            axes[i].imshow(cv2.cvtColor(blended, cv2.COLOR_BGR2RGB))
-            axes[i].set_title(f'Registration Result {i+1}')
-            axes[i].set_aspect('equal')
-            axes[i].axis('off')
+        if voxel1_column in registration_data.columns and voxel2_column in registration_data.columns:
+            result_voxel1_tmp = registration_data[voxel1_column].dropna().values
+            result_voxel2_tmp = registration_data[voxel2_column].dropna().values
+            
+            voxel_result1 = np.zeros((N, N))
+            voxel_result2 = np.zeros((N, N))
+            
+            for j in range(N):
+                for k in range(N):
+                    voxel_result1[j,k] = result_voxel1_tmp[k * N - N + j]
+                    voxel_result2[j,k] = result_voxel2_tmp[k * N - N + j]
+            
+            # Normalize data for blending
+            voxel1_norm = cv2.normalize(voxel_result1.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
+            voxel2_norm = cv2.normalize(voxel_result2.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
+            
+            # Convert to 3-channel for color blending
+            voxel1_color = cv2.applyColorMap(voxel1_norm.astype(np.uint8), cv2.COLORMAP_JET)
+            voxel2_color = cv2.applyColorMap(voxel2_norm.astype(np.uint8), cv2.COLORMAP_VIRIDIS)
+            
+            # Blend the images
+            blended = cv2.addWeighted(voxel1_color, 0.5, voxel2_color, 0.5, 0)
+            
+            if i < len(axes):
+                axes[i].imshow(cv2.cvtColor(blended, cv2.COLOR_BGR2RGB))
+                axes[i].set_title(f'Registration Result {i+1}')
+                axes[i].set_aspect('equal')
+                axes[i].axis('off')
+        else:
+            print(f"Warning: Columns {voxel1_column} or {voxel2_column} not found in registration_results.csv")
     
     plt.tight_layout()
     plt.savefig(f"{name_of_folder}/registration_results.png", dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"All visualizations have been saved to the '{name_of_folder}' folder.")
+    # Display and visualize transformation matrices
+    print("\nTransformation Matrices:")
+    print("=" * 50)
+    for i, row in transformation_data.iterrows():
+        print(f"\nSolution {i+1}:")
+        transformation_matrix = np.array([
+            [row['r11'], row['r12'], row['r13'], row['tx']],
+            [row['r21'], row['r22'], row['r23'], row['ty']],
+            [row['r31'], row['r32'], row['r33'], row['tz']],
+            [row['h41'], row['h42'], row['h43'], row['h44']]
+        ])
+        print(transformation_matrix)
+        
+    # Save transformation matrices visualization
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    axes = axes.flatten()
+    
+    for i, row in transformation_data.iterrows():
+        if i < len(axes):
+            transformation_matrix = np.array([
+                [row['r11'], row['r12'], row['r13'], row['tx']],
+                [row['r21'], row['r22'], row['r23'], row['ty']],
+                [row['r31'], row['r32'], row['r33'], row['tz']],
+                [row['h41'], row['h42'], row['h43'], row['h44']]
+            ])
+            
+            im = axes[i].imshow(transformation_matrix, cmap='RdBu', vmin=-1, vmax=1)
+            axes[i].set_title(f'Transformation Matrix {i+1}')
+            
+            # Add text annotations
+            for (j, k), val in np.ndenumerate(transformation_matrix):
+                axes[i].text(k, j, f'{val:.3f}', ha='center', va='center', 
+                           color='white' if abs(val) > 0.5 else 'black', fontsize=8)
+            
+            plt.colorbar(im, ax=axes[i])
+    
+    plt.tight_layout()
+    plt.savefig(f"{name_of_folder}/transformation_matrices.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"\nAll visualizations have been saved to the '{name_of_folder}' folder.")
     print(f"Number of solutions: {number_of_solutions}")
     print(f"Best solution: {best_solution}")
+    
+    print(f"\nBest transformation matrix (Solution {best_solution}):")
+    best_row = transformation_data.iloc[best_solution-1]  # Convert to 0-based index
+    best_transformation = np.array([
+        [best_row['r11'], best_row['r12'], best_row['r13'], best_row['tx']],
+        [best_row['r21'], best_row['r22'], best_row['r23'], best_row['ty']],
+        [best_row['r31'], best_row['r32'], best_row['r33'], best_row['tz']],
+        [best_row['h41'], best_row['h42'], best_row['h43'], best_row['h44']]
+    ])
+    print(best_transformation)
 
 if __name__ == "__main__":
     main()
