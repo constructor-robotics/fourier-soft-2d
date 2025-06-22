@@ -690,7 +690,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
     long distanceToMaxElement = std::distance(maximumHeightPeakList.begin(), minmax);
 
     if (debug) {
-        // Write transformation matrices to separate CSV file
+        // Write transformation matrices to separate CSV file (all solutions)
         std::ofstream transformationFile;
         transformationFile.open(outputDir + "/registration_solutions_transformation.csv");
         
@@ -775,6 +775,21 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
         }
         
         csvFile.close();
+    } else {
+        // Write only the best transformation matrix to CSV file
+        std::ofstream transformationFile;
+        transformationFile.open(outputDir + "/registration_solutions_transformation.csv");
+        
+        // Write transformation matrix header
+        transformationFile << "r11,r12,r13,tx,r21,r22,r23,ty,r31,r32,r33,tz,h41,h42,h43,h44\n";
+        
+        // Write only the best transformation matrix
+        const auto& bestTransformation = listOfTransformations[distanceToMaxElement];
+        transformationFile << bestTransformation(0,0) << "," << bestTransformation(0,1) << "," << bestTransformation(0,2) << "," << bestTransformation(0,3) << ",";
+        transformationFile << bestTransformation(1,0) << "," << bestTransformation(1,1) << "," << bestTransformation(1,2) << "," << bestTransformation(1,3) << ",";
+        transformationFile << bestTransformation(2,0) << "," << bestTransformation(2,1) << "," << bestTransformation(2,2) << "," << bestTransformation(2,3) << ",";
+        transformationFile << bestTransformation(3,0) << "," << bestTransformation(3,1) << "," << bestTransformation(3,2) << "," << bestTransformation(3,3) << "\n";
+        transformationFile.close();
     }
 
     return listOfTransformations[distanceToMaxElement];//robot transformation matrix from 1 to 2
