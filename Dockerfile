@@ -165,9 +165,9 @@ RUN cd src && \
     echo "=== Symbolic links created ===" && \
     ls -la /workspace/ | grep -E "(fourier_soft2D|imageStitching|plotRegistrationSolution)"
 
-# Set up environment variables for development
-ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
-ENV LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+RUN mkdir -p /workspace/input && \
+    mkdir -p /workspace/output && \
+    echo "=== Created input and output directories ==="
 
 # Verify build directory exists in final image
 RUN echo "=== Final verification - build directory and symbolic links ===" && \
