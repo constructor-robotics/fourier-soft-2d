@@ -76,6 +76,15 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     python3-numpy
 
+# Python libraries installation
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-numpy \
+    python3-matplotlib \
+    python3-opencv\
+    python3-scipy \
+    python3-pandas
+
 # FFTW3 (Fast Fourier Transform library)
 RUN apt-get update && apt-get install -y \
     libfftw3-dev \
@@ -98,7 +107,19 @@ RUN apt-get update && apt-get install -y \
     nano \
     htop \
     tree \
+    valgrind \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user 'tester' to avoid root permissions on created files
+RUN groupadd -r tester && \
+    useradd -r -g tester -m -d /home/tester -s /bin/bash tester && \
+    echo "tester ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    chown -R tester:tester /home/tester
+
+# Create workspace and set proper permissions
+RUN mkdir -p /workspace && \
+    chown -R tester:tester /workspace
 
 # Verify installations
 RUN echo "=== Verifying library installations ===" && \
@@ -107,20 +128,41 @@ RUN echo "=== Verifying library installations ===" && \
     (pkg-config --modversion opencv4 || pkg-config --modversion opencv) && echo "✓ OpenCV installed" || echo "✗ OpenCV NOT properly installed" && \
     (pkg-config --modversion fftw3 && echo "✓ FFTW3 installed") || echo "✗ FFTW3 NOT properly installed" && \
     (gcc -fopenmp --version >/dev/null 2>&1 && echo "✓ OpenMP support available") || echo "✗ OpenMP NOT available" && \
-    (find /usr -name "CGAL" -type d 2>/dev/null | head -1 >/dev/null && echo "✓ CGAL installed") || echo "✗ CGAL NOT properly installed"
+    (find /usr -name "CGAL" -type d 2>/dev/null | head -1 >/dev/null && echo "✓ CGAL installed") || echo "✗ CGAL NOT properly installed" && \
+    (python3 --version && echo "✓ Python3 installed") || echo "✗ Python3 NOT installed" && \
+    (python3 -c "import numpy, cv2, matplotlib, scipy, pandas; print('✓ Python libraries installed')" 2>/dev/null) || echo "✗ Python libraries NOT properly installed"
 
+# Copy source code from host src/ directory to container
+COPY --chown=tester:tester ./src /workspace/src
 
 # Set up environment variables for development
-ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
-ENV LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+# ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
+# ENV LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 
-# Create a workspace directory
+# Switch to tester user for compilation
+USER tester
+
+# Set working directory BEFORE compilation
 WORKDIR /workspace
+
+# Create build directory and compile C++ code
+RUN cd src && \
+    mkdir -p build && \
+    cd build && \
+    echo "=== Starting CMake configuration ===" && \
+    cmake .. && \
+    echo "=== Starting compilation ===" && \
+    make -j$(nproc) && \
+    echo "=== Compilation completed ===" && \
+    echo "Built executables:" && \
+    find . -type f -executable -exec ls -la {} \; && \
+    echo "=== Build directory contents ===" && \
+    ls -la /workspace/src/build/
 
 # Set default command
 CMD ["/bin/bash"]
 
 # Labels for documentation
 LABEL maintainer="Arturo Gomez-Chavez <agomezchav@constructor.university>"
-LABEL description="Ubuntu 20.04 with PCL 1.10 and C/C++ development tools"
+LABEL description="Ubuntu 20.04 with C++/Pyhton tools for FSOFT Registration"
 LABEL version="1.0"
