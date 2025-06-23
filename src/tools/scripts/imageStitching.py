@@ -1,3 +1,35 @@
+def find_latest_output_directory(base_dir="/workspace/output"):
+    """
+    Find the directory with the latest unix timestamp name in the base directory.
+    
+    Args:
+        base_dir (str): Base directory to search in
+        
+    Returns:
+        Path: Path to the latest timestamped directory
+    """
+    base_path = Path(base_dir)
+    
+    if not base_path.exists():
+        raise ValueError(f"Base directory does not exist: {base_dir}")
+    
+    # Find all directories that look like unix timestamps (numeric names)
+    timestamp_dirs = []
+    for item in base_path.iterdir():
+        if item.is_dir() and item.name.isdigit():
+            timestamp_dirs.append((int(item.name), item))
+    
+    if not timestamp_dirs:
+        raise ValueError(f"No timestamped directories found in {base_dir}")
+    
+    # Sort by timestamp and get the latest (highest number)
+    timestamp_dirs.sort(key=lambda x: x[0], reverse=True)
+    latest_timestamp, latest_dir = timestamp_dirs[0]
+    
+    print(f"Found latest timestamped directory: {latest_dir} (timestamp: {latest_timestamp})")
+    
+    return latest_dir
+
 def calculate_rotation_canvas_size(image_shape, rotation_angle_deg):
     """
     Calculate the canvas size needed to fit the entire rotated image.
@@ -474,29 +506,37 @@ def main():
     parser = argparse.ArgumentParser(description='Systematic image stitching')
     parser.add_argument('image1_path', help='Path to first image relative to /workspace/input')
     parser.add_argument('image2_path', help='Path to second image relative to /workspace/input')
-    parser.add_argument('csv_dir_path', help='Path to directory containing CSV file')
-    parser.add_argument('solution_index', type=int, nargs='?', default=0, 
+    parser.add_argument('--csv_dir_path', help='Path to directory containing CSV file')
+    parser.add_argument('--solution_index', type=int, nargs='?', default=0, 
                        help='Solution index (default: 0)')
     parser.add_argument('--adjust-canvas', action='store_true',
                        help='Adjust canvas size to fit full transformation (default: False)')
     
     args = parser.parse_args()
     
+    # Setup paths
+    input_dir = Path('/workspace/input')
+    output_dir = Path('/workspace/output')
+    img1_path = input_dir / args.image1_path
+    img2_path = input_dir / args.image2_path
+    
+    # Handle CSV directory - use latest timestamped dir if not provided
+    if args.csv_dir_path is None:
+        print("No CSV directory specified, searching for latest timestamped directory...")
+        csv_dir = find_latest_output_directory()
+    else:
+        csv_dir = output_dir / Path(args.csv_dir_path) 
+    
+    csv_path = csv_dir / 'registration_solutions_transformation.csv'
+    output_dir = csv_dir
+    
     print("=== SYSTEMATIC IMAGE STITCHING ===")
     print(f"Image 1: {args.image1_path}")
     print(f"Image 2: {args.image2_path}")
-    print(f"CSV dir: {args.csv_dir_path}")
+    print(f"CSV dir: {csv_dir}")
     print(f"Solution: {args.solution_index}")
     print(f"Adjust canvas: {args.adjust_canvas}")
     print()
-    
-    # Setup paths
-    input_dir = Path('/workspace/input')
-    img1_path = input_dir / args.image1_path
-    img2_path = input_dir / args.image2_path
-    csv_dir = Path(args.csv_dir_path)
-    csv_path = csv_dir / 'registration_solutions_transformation.csv'
-    output_dir = csv_dir
     
     # Validate paths
     if not img1_path.exists():
@@ -528,8 +568,8 @@ def main():
         # Save results
         print("\n=== SAVING RESULTS ===")
         
-        original_path = output_dir / "original_blend.jpg"
-        colormap_path = output_dir / "colormap_blend.jpg"
+        original_path = output_dir / "original_blend.png"
+        colormap_path = output_dir / "colormap_blend.png"
         
         cv2.imwrite(str(original_path), original_blend)
         cv2.imwrite(str(colormap_path), colormap_blend)

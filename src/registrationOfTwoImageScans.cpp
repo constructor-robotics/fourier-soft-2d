@@ -5,8 +5,9 @@
 //
 // Created by jurobotics on 13.09.21.
 //
-// /home/tim-external/dataFolder/StPereDataset/lowNoise52/scanNumber_0/00_ForShow.jpg /home/tim-external/dataFolder/StPereDataset/lowNoise52/scanNumber_1/00_ForShow.jpg
-// /home/tim-external/dataFolder/ValentinBunkerData/noNoise305_52/scanNumber_0/00_ForShow.jpg  /home/tim-external/dataFolder/ValentinBunkerData/noNoise305_52/scanNumber_1/00_ForShow.jpg
+// Example usage:
+// ./registrationOfTwoImageScans img1.jpg img2.jpg
+// ./registrationOfTwoImageScans folder1/scan1.png folder2/scan2.png --debug true
 #include "softDescriptorRegistration.h"
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -49,8 +50,28 @@ bool isPowerOfTwo(int value) {
     return value > 0 && (value & (value - 1)) == 0;
 }
 
+std::string resolveInputPath(const std::string& relativePath) {
+    // Base input directory
+    const std::string baseInputDir = "/workspace/input";
+    
+    // If the path is already absolute (starts with /), return as is
+    if (!relativePath.empty() && relativePath[0] == '/') {
+        return relativePath;
+    }
+    
+    // Otherwise, prepend the base input directory
+    return baseInputDir + "/" + relativePath;
+}
+
 void printUsage(const std::string& programName) {
     std::cout << "Usage: " << programName << " <first_image> <second_image> [options]" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Image paths:" << std::endl;
+    std::cout << "  All image paths are relative to /workspace/input/" << std::endl;
+    std::cout << "  Examples:" << std::endl;
+    std::cout << "    'image1.jpg' resolves to '/workspace/input/image1.jpg'" << std::endl;
+    std::cout << "    'folder/scan.png' resolves to '/workspace/input/folder/scan.png'" << std::endl;
+    std::cout << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  --output-dir <dir_name>   Output directory name (default: current UNIX timestamp)" << std::endl;
     std::cout << "  --dimensions <N>          Image dimensions (must be power of 2, default: auto-detect)" << std::endl;
@@ -59,7 +80,8 @@ void printUsage(const std::string& programName) {
     std::cout << std::endl;
     std::cout << "Examples:" << std::endl;
     std::cout << "  " << programName << " img1.jpg img2.jpg" << std::endl;
-    std::cout << "  " << programName << " img1.jpg img2.jpg --output-dir my_results --dimensions 256 --debug true" << std::endl;
+    std::cout << "  " << programName << " scans/img1.jpg scans/img2.jpg --debug true" << std::endl;
+    std::cout << "  " << programName << " folder1/scan1.png folder2/scan2.png --output-dir my_results --dimensions 256" << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -67,8 +89,8 @@ int main(int argc, char **argv) {
     std::string outputDirName = "";
     int dimensionScan = -1; // -1 means auto-detect
     bool debug = false;
-    std::string firstImagePath = "";
-    std::string secondImagePath = "";
+    std::string firstImageRelativePath = "";
+    std::string secondImageRelativePath = "";
 
     // Parse command line arguments
     if (argc < 3) {
@@ -77,9 +99,9 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // First two arguments are always the image paths
-    firstImagePath = argv[1];
-    secondImagePath = argv[2];
+    // First two arguments are always the image paths (relative to /workspace/input)
+    firstImageRelativePath = argv[1];
+    secondImageRelativePath = argv[2];
 
     // Parse optional arguments
     for (int i = 3; i < argc; i++) {
@@ -133,19 +155,46 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Resolve full paths
+    std::string firstImagePath = resolveInputPath(firstImageRelativePath);
+    std::string secondImagePath = resolveInputPath(secondImageRelativePath);
+
+    std::cout << "Loading images:" << std::endl;
+    std::cout << "  First image:  " << firstImageRelativePath << " -> " << firstImagePath << std::endl;
+    std::cout << "  Second image: " << secondImageRelativePath << " -> " << secondImagePath << std::endl;
+
+    // Check if input files exist
+    if (!std::filesystem::exists(firstImagePath)) {
+        std::cout << "Error: First image file does not exist: " << firstImagePath << std::endl;
+        std::cout << "Make sure the file is in the /workspace/input directory" << std::endl;
+        return -1;
+    }
+
+    if (!std::filesystem::exists(secondImagePath)) {
+        std::cout << "Error: Second image file does not exist: " << secondImagePath << std::endl;
+        std::cout << "Make sure the file is in the /workspace/input directory" << std::endl;
+        return -1;
+    }
+
     // Load images
     cv::Mat img1 = cv::imread(firstImagePath, cv::IMREAD_GRAYSCALE);
     cv::Mat img2 = cv::imread(secondImagePath, cv::IMREAD_GRAYSCALE);
 
     if (img1.empty()) {
         std::cout << "Error: Could not load first image: " << firstImagePath << std::endl;
+        std::cout << "Make sure the file is a valid image format" << std::endl;
         return -1;
     }
 
     if (img2.empty()) {
         std::cout << "Error: Could not load second image: " << secondImagePath << std::endl;
+        std::cout << "Make sure the file is a valid image format" << std::endl;
         return -1;
     }
+
+    std::cout << "Images loaded successfully!" << std::endl;
+    std::cout << "  First image size:  " << img1.cols << "x" << img1.rows << std::endl;
+    std::cout << "  Second image size: " << img2.cols << "x" << img2.rows << std::endl;
 
     // Determine dimensions
     if (dimensionScan == -1) {
@@ -202,8 +251,10 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    std::cout << "Voxel size: " << dimensionScan << std::endl;
-    std::cout << "Debug mode: " << (debug ? "enabled" : "disabled") << std::endl;
+    std::cout << "\nRegistration Parameters:" << std::endl;
+    std::cout << "  Voxel size: " << dimensionScan << "x" << dimensionScan << std::endl;
+    std::cout << "  Debug mode: " << (debug ? "enabled" : "disabled") << std::endl;
+    std::cout << "  Output directory: " << fullOutputDir << std::endl;
 
     // Allocate memory for voxel data
     double *voxelData1;
@@ -224,6 +275,8 @@ int main(int argc, char **argv) {
 
     // Create registration object
     softDescriptorRegistration scanRegistrationObject(dimensionScan, dimensionScan / 2, dimensionScan / 2, dimensionScan / 2 - 1);
+
+    std::cout << "\nStarting registration process..." << std::endl;
 
     // Perform registration
     // use initial guess yes/no Currently set to no. Therefore, global registration is happening.
