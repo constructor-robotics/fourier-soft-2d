@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
     image: ubuntu-pcl-dev:20.04
     container_name: fourier-sof-2d
     volumes:

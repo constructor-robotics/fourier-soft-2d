@@ -112,8 +112,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user 'tester' to avoid root permissions on created files
-RUN groupadd -r tester && \
-    useradd -r -g tester -m -d /home/tester -s /bin/bash tester && \
+# Use build args to match host user UID/GID
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN groupadd -r tester -g ${GROUP_ID} && \
+    useradd -r -g tester -u ${USER_ID} -m -d /home/tester -s /bin/bash tester && \
     echo "tester ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     chown -R tester:tester /home/tester
 
