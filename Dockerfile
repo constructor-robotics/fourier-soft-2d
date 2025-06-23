@@ -157,7 +157,33 @@ RUN cd src && \
     echo "Built executables:" && \
     find . -type f -executable -exec ls -la {} \; && \
     echo "=== Build directory contents ===" && \
-    ls -la /workspace/src/build/
+    ls -la /workspace/src/build/ && \
+    echo "=== Creating symbolic links for easy access ===" && \
+    ln -sf /workspace/src/build/fourier_soft2D /workspace/fourier_soft2D && \
+    ln -sf /workspace/src/tools/scripts/imageStitching.py /workspace/imageStitching.py && \
+    ln -sf /workspace/src/tools/scripts/plotRegistrationSolution.py /workspace/plotRegistrationSolution.py && \
+    echo "=== Symbolic links created ===" && \
+    ls -la /workspace/ | grep -E "(fourier_soft2D|imageStitching|plotRegistrationSolution)"
+
+# Set up environment variables for development
+ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
+ENV LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+
+# Verify build directory exists in final image
+RUN echo "=== Final verification - build directory and symbolic links ===" && \
+    ls -la /workspace/src/build/ 2>/dev/null || echo "Build directory missing!" && \
+    echo "=== Checking symbolic links in /workspace ===" && \
+    ls -la /workspace/ | grep -E "(fourier_soft2D|imageStitching|plotRegistrationSolution)" || echo "Symbolic links missing!"
+
+# Set default command that shows available programs
+# CMD echo "=== Available Programs in /workspace ===" && \
+#     echo "C++ Executable:" && \
+#     ls -la /workspace/fourier_soft2D 2>/dev/null || echo "  fourier_soft2D - NOT FOUND" && \
+#     echo "Python Scripts:" && \
+#     ls -la /workspace/imageStitching.py 2>/dev/null || echo "  imageStitching.py - NOT FOUND" && \
+#     ls -la /workspace/plotRegistrationSolution.py 2>/dev/null || echo "  plotRegistrationSolution.py - NOT FOUND" && \
+#     echo "=== Ready for use! ===" && \
+#     /bin/bash
 
 # Set default command
 CMD ["/bin/bash"]
