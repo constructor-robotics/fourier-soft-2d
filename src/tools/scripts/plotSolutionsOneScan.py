@@ -421,8 +421,8 @@ def generate_debug_visualizations(name_of_folder, magnitude_fftw1, phase_fftw1, 
             voxel2_norm = cv2.normalize(voxel_result2.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
             
             # Convert to 3-channel for color blending
-            voxel1_color = cv2.applyColorMap(voxel1_norm.astype(np.uint8), cv2.COLORMAP_JET)
-            voxel2_color = cv2.applyColorMap(voxel2_norm.astype(np.uint8), cv2.COLORMAP_VIRIDIS)
+            voxel1_color = cv2.applyColorMap(voxel1_norm.astype(np.uint8), cv2.COLORMAP_HOT)
+            voxel2_color = cv2.applyColorMap(voxel2_norm.astype(np.uint8), cv2.COLORMAP_COOL)
             
             # Blend the images
             blended = cv2.addWeighted(voxel1_color, 0.5, voxel2_color, 0.5, 0)

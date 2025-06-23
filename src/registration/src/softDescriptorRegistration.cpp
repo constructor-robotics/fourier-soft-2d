@@ -625,6 +625,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
 
         //rotating first image to calculate correlation next
         cv::Point2f pc(magTMP1.cols / 2., magTMP1.rows / 2.);
+        std::cout << "ESTIMATED ANGLE:" << estimatedAngle << std::endl;
         cv::Mat r = cv::getRotationMatrix2D(pc, estimatedAngle * 180.0 / M_PI, 1.0);
         cv::warpAffine(magTMP1, magTMP1, r, magTMP1.size());
 
@@ -643,6 +644,10 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
         estimatedRotationScans(1, 3) = translation.y();
         estimatedRotationScans(2, 3) = 0;
         estimatedRotationScans(3, 3) = 1;
+        // Inverse transformation, NOT SURE WHY NEED TO CALCUALTE THE INVERSE AN SAVE BACk
+        Eigen::Matrix4d estimatedRotationScans1To2 = estimatedRotationScans.inverse();
+        estimatedRotationScans(0, 3) = - estimatedRotationScans1To2(1, 3);
+        estimatedRotationScans(1, 3) = - estimatedRotationScans1To2(0, 3);
 
         //transformation and peak height of correlation added to list.
         listOfTransformations.push_back(estimatedRotationScans);
@@ -660,7 +665,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
             csvData.resultingCorrelationShift.push_back(correlationShiftData);
 
             // Apply transformation for result voxels
-            Eigen::Matrix4d estimatedRotationScans1To2 = estimatedRotationScans.inverse();
+            //Eigen::Matrix4d estimatedRotationScans1To2 = estimatedRotationScans.inverse();
 
             cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1,
                     0,
@@ -668,6 +673,8 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
                     0,
                     1,
                     estimatedRotationScans1To2(0, 3));
+            
+            std::cout << "*** TRANS_MAT:" << trans_mat << std::endl;
 
             warpAffine(magTMP2, magTMP2, trans_mat, magTMP2.size());
             
