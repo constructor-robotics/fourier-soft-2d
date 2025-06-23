@@ -197,16 +197,17 @@ def step1_load_images(img1_path, img2_path):
     
     return img1, img2
 
-def step2_read_transformation_matrix(csv_path, solution_index=0):
+def step2_read_and_process_transformation_matrix(csv_path, solution_index=0, inverse=False):
     """
-    Step 2: Read transformation matrix from CSV file
+    Step 2: Read transformation matrix from CSV file and optionally compute inverse
     
     Args:
         csv_path (str): Path to CSV file
         solution_index (int): Which solution to use
+        inverse (bool): Whether to compute inverse transformation
         
     Returns:
-        np.ndarray: 4x4 transformation matrix
+        np.ndarray: 4x4 transformation matrix (original or inverse)
     """
     print("\n=== STEP 2: Reading Transformation Matrix ===")
     
@@ -227,10 +228,21 @@ def step2_read_transformation_matrix(csv_path, solution_index=0):
         [row['h41'], row['h42'], row['h43'], row['h44']]
     ])
     
-    print("4x4 Transformation Matrix:")
+    print("Original 4x4 Transformation Matrix:")
     print(transformation_matrix)
     
-    return transformation_matrix
+    if inverse:
+        print("\nComputing inverse transformation...")
+        # Compute inverse of 4x4 transformation matrix
+        try:
+            inverse_matrix = np.linalg.inv(transformation_matrix)
+            print("Inverse 4x4 Transformation Matrix:")
+            print(inverse_matrix)
+            return inverse_matrix
+        except np.linalg.LinAlgError:
+            raise ValueError("Transformation matrix is not invertible")
+    else:
+        return transformation_matrix
 
 def step3a_extract_rotation_angle(transformation_matrix):
     """
@@ -252,21 +264,22 @@ def step3a_extract_rotation_angle(transformation_matrix):
     
     return rotation_angle_deg
 
-def step3b_rotate_image1(img1, rotation_angle_deg, adjust_canvas=False):
+def step3b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name="image"):
     """
-    Step 3b: Rotate image1 using cv2.warpAffine()
+    Step 3b: Rotate image using cv2.warpAffine()
     
     Args:
-        img1 (np.ndarray): First image
+        img (np.ndarray): Image to rotate
         rotation_angle_deg (float): Rotation angle in degrees
         adjust_canvas (bool): Whether to adjust canvas size to fit rotation
+        image_name (str): Name for logging purposes
         
     Returns:
         np.ndarray: Rotated image
     """
-    print("\n=== STEP 3b: Rotating Image 1 ===")
+    print(f"\n=== STEP 3b: Rotating {image_name} ===")
     
-    height, width = img1.shape[:2]
+    height, width = img.shape[:2]
     center = (width / 2, height / 2)
     
     # Create rotation matrix
@@ -276,7 +289,7 @@ def step3b_rotate_image1(img1, rotation_angle_deg, adjust_canvas=False):
     
     if adjust_canvas:
         # Calculate canvas size needed for full rotation
-        canvas_width, canvas_height = calculate_rotation_canvas_size(img1.shape, rotation_angle_deg)
+        canvas_width, canvas_height = calculate_rotation_canvas_size(img.shape, rotation_angle_deg)
         print(f"Adjusted canvas size for rotation: {canvas_width}x{canvas_height}")
         
         # Adjust rotation matrix to center the rotated image in new canvas
@@ -297,8 +310,8 @@ def step3b_rotate_image1(img1, rotation_angle_deg, adjust_canvas=False):
         print("Using original canvas size")
     
     # Apply rotation
-    rotated_img1 = cv2.warpAffine(
-        img1, 
+    rotated_img = cv2.warpAffine(
+        img, 
         rotation_matrix, 
         output_size,
         flags=cv2.INTER_LINEAR,
@@ -306,9 +319,9 @@ def step3b_rotate_image1(img1, rotation_angle_deg, adjust_canvas=False):
         borderValue=0
     )
     
-    print(f"Rotated image size: {rotated_img1.shape}")
+    print(f"Rotated {image_name} size: {rotated_img.shape}")
     
-    return rotated_img1
+    return rotated_img
 
 def step3c_create_translation_matrix(transformation_matrix):
     """
@@ -339,21 +352,22 @@ def step3c_create_translation_matrix(transformation_matrix):
     
     return translation_matrix
 
-def step3d_apply_translation(rotated_img1, translation_matrix, adjust_canvas=False):
+def step3d_apply_translation(rotated_img, translation_matrix, adjust_canvas=False, image_name="image"):
     """
-    Step 3d: Apply translation to rotated image1
+    Step 3d: Apply translation to rotated image
     
     Args:
-        rotated_img1 (np.ndarray): Rotated image
+        rotated_img (np.ndarray): Rotated image
         translation_matrix (np.ndarray): 2x3 translation matrix
         adjust_canvas (bool): Whether to adjust canvas size for translation
+        image_name (str): Name for logging purposes
         
     Returns:
         np.ndarray: Transformed image (rotated + translated)
     """
-    print("\n=== STEP 3d: Applying Translation ===")
+    print(f"\n=== STEP 3d: Applying Translation to {image_name} ===")
     
-    height, width = rotated_img1.shape[:2]
+    height, width = rotated_img.shape[:2]
     
     if adjust_canvas:
         # Calculate canvas size needed for translation
@@ -361,7 +375,7 @@ def step3d_apply_translation(rotated_img1, translation_matrix, adjust_canvas=Fal
         ty = translation_matrix[1, 2]
         
         canvas_width, canvas_height, offset_x, offset_y = calculate_translation_canvas_size(
-            rotated_img1.shape, tx, ty
+            rotated_img.shape, tx, ty
         )
         print(f"Adjusted canvas size for translation: {canvas_width}x{canvas_height}")
         print(f"Canvas offset: ({offset_x}, {offset_y})")
@@ -382,7 +396,7 @@ def step3d_apply_translation(rotated_img1, translation_matrix, adjust_canvas=Fal
     
     # Apply translation
     transformed_image = cv2.warpAffine(
-        rotated_img1,
+        rotated_img,
         adjusted_translation_matrix,
         output_size,
         flags=cv2.INTER_LINEAR,
@@ -390,76 +404,78 @@ def step3d_apply_translation(rotated_img1, translation_matrix, adjust_canvas=Fal
         borderValue=0
     )
     
-    print(f"Final transformed image size: {transformed_image.shape}")
+    print(f"Final transformed {image_name} size: {transformed_image.shape}")
     
     return transformed_image
 
-def step4_blend_images(transformed_image, img2, adjust_canvas=False):
+def step4_blend_images(transformed_image, reference_image, adjust_canvas=False, transform_name="img1", reference_name="img2"):
     """
-    Step 4: Blend transformed_image with image2
+    Step 4: Blend transformed_image with reference_image
     Creates two versions: one with colormaps, one with original images
     
     Args:
-        transformed_image (np.ndarray): Final transformed image
-        img2 (np.ndarray): Second image (reference)
-        adjust_canvas (bool): Whether canvas was adjusted (affects img2 handling)
+        transformed_image (np.ndarray): Transformed image
+        reference_image (np.ndarray): Reference image (unchanged)
+        adjust_canvas (bool): Whether canvas was adjusted (affects reference image handling)
+        transform_name (str): Name of transformed image for logging
+        reference_name (str): Name of reference image for logging
         
     Returns:
         tuple: (original_blend, colormap_blend)
     """
-    print("\n=== STEP 4: Blending Images ===")
+    print(f"\n=== STEP 4: Blending {transform_name} (transformed) with {reference_name} (reference) ===")
     
     # Get sizes
     h1, w1 = transformed_image.shape[:2]
-    h2, w2 = img2.shape[:2]
+    h2, w2 = reference_image.shape[:2]
     
     if adjust_canvas:
-        # Expand img2 to match transformed_image canvas and center it
-        print(f"Expanding img2 from {w2}x{h2} to {w1}x{h1} and centering")
-        img2_expanded = expand_image_to_canvas(img2, w1, h1)
-        img2_to_use = img2_expanded
+        # Expand reference image to match transformed image canvas and center it
+        print(f"Expanding {reference_name} from {w2}x{h2} to {w1}x{h1} and centering")
+        reference_expanded = expand_image_to_canvas(reference_image, w1, h1)
+        reference_to_use = reference_expanded
     else:
-        # Resize img2 to match transformed_image if needed
+        # Resize reference image to match transformed image if needed
         if (h1, w1) != (h2, w2):
-            print(f"Resizing img2 from {w2}x{h2} to {w1}x{h1}")
-            img2_to_use = cv2.resize(img2, (w1, h1))
+            print(f"Resizing {reference_name} from {w2}x{h2} to {w1}x{h1}")
+            reference_to_use = cv2.resize(reference_image, (w1, h1))
         else:
-            img2_to_use = img2
+            reference_to_use = reference_image
     
     # Create masks
     if len(transformed_image.shape) == 3:
-        mask1 = np.any(transformed_image > 0, axis=2)
-        mask2 = np.any(img2_to_use > 0, axis=2)
+        mask_transformed = np.any(transformed_image > 0, axis=2)
+        mask_reference = np.any(reference_to_use > 0, axis=2)
     else:
-        mask1 = transformed_image > 0
-        mask2 = img2_to_use > 0
+        mask_transformed = transformed_image > 0
+        mask_reference = reference_to_use > 0
     
-    overlap = mask1 & mask2
+    overlap = mask_transformed & mask_reference
     overlap_pixels = np.sum(overlap)
     print(f"Overlap region: {overlap_pixels} pixels")
     
     # === ORIGINAL BLEND (no colormaps) ===
     print("Creating original blend...")
-    img1_float = transformed_image.astype(np.float32)
-    img2_float = img2_to_use.astype(np.float32)
+    transformed_float = transformed_image.astype(np.float32)
+    reference_float = reference_to_use.astype(np.float32)
     
     original_blend = np.zeros_like(transformed_image, dtype=np.float32)
     
-    # Where only img1 exists
-    only_img1 = mask1 & ~mask2
-    original_blend[only_img1] = img1_float[only_img1]
+    # Where only transformed image exists
+    only_transformed = mask_transformed & ~mask_reference
+    original_blend[only_transformed] = transformed_float[only_transformed]
     
-    # Where only img2 exists
-    only_img2 = mask2 & ~mask1
-    original_blend[only_img2] = img2_float[only_img2]
+    # Where only reference image exists
+    only_reference = mask_reference & ~mask_transformed
+    original_blend[only_reference] = reference_float[only_reference]
     
     # Average in overlap
     if overlap_pixels > 0:
         if len(transformed_image.shape) == 3:
             for c in range(transformed_image.shape[2]):
-                original_blend[overlap, c] = (img1_float[overlap, c] + img2_float[overlap, c]) / 2.0
+                original_blend[overlap, c] = (transformed_float[overlap, c] + reference_float[overlap, c]) / 2.0
         else:
-            original_blend[overlap] = (img1_float[overlap] + img2_float[overlap]) / 2.0
+            original_blend[overlap] = (transformed_float[overlap] + reference_float[overlap]) / 2.0
     
     original_blend = original_blend.astype(np.uint8)
     
@@ -467,31 +483,31 @@ def step4_blend_images(transformed_image, img2, adjust_canvas=False):
     print("Creating colormap blend...")
     
     # Apply colormaps
-    img1_colored = cv2.applyColorMap(
+    transformed_colored = cv2.applyColorMap(
         cv2.cvtColor(transformed_image, cv2.COLOR_BGR2GRAY) if len(transformed_image.shape) == 3 else transformed_image,
         cv2.COLORMAP_HOT
     )
-    img2_colored = cv2.applyColorMap(
-        cv2.cvtColor(img2_to_use, cv2.COLOR_BGR2GRAY) if len(img2_to_use.shape) == 3 else img2_to_use,
+    reference_colored = cv2.applyColorMap(
+        cv2.cvtColor(reference_to_use, cv2.COLOR_BGR2GRAY) if len(reference_to_use.shape) == 3 else reference_to_use,
         cv2.COLORMAP_COOL
     )
     
     # Blend colored images
-    img1_colored_float = img1_colored.astype(np.float32) / 255.0
-    img2_colored_float = img2_colored.astype(np.float32) / 255.0
+    transformed_colored_float = transformed_colored.astype(np.float32) / 255.0
+    reference_colored_float = reference_colored.astype(np.float32) / 255.0
     
-    colormap_blend = np.zeros_like(img1_colored, dtype=np.float32)
+    colormap_blend = np.zeros_like(transformed_colored, dtype=np.float32)
     
-    # Where only img1 exists
-    colormap_blend[only_img1] = img1_colored_float[only_img1]
+    # Where only transformed image exists
+    colormap_blend[only_transformed] = transformed_colored_float[only_transformed]
     
-    # Where only img2 exists
-    colormap_blend[only_img2] = img2_colored_float[only_img2]
+    # Where only reference image exists
+    colormap_blend[only_reference] = reference_colored_float[only_reference]
     
     # Blend in overlap (50/50)
     if overlap_pixels > 0:
         for c in range(3):  # RGB channels
-            colormap_blend[overlap, c] = 0.5 * (img1_colored_float[overlap, c] + img2_colored_float[overlap, c])
+            colormap_blend[overlap, c] = 0.5 * (transformed_colored_float[overlap, c] + reference_colored_float[overlap, c])
     
     colormap_blend = (colormap_blend * 255).astype(np.uint8)
     
@@ -509,6 +525,8 @@ def main():
     parser.add_argument('--csv_dir_path', help='Path to directory containing CSV file')
     parser.add_argument('--solution_index', type=int, nargs='?', default=0, 
                        help='Solution index (default: 0)')
+    parser.add_argument('--inverse', action='store_true',
+                       help='Apply inverse transformation (transform img2 to img1 instead) (default: False)')
     parser.add_argument('--adjust-canvas', action='store_true',
                        help='Adjust canvas size to fit full transformation (default: False)')
     
@@ -535,6 +553,7 @@ def main():
     print(f"Image 2: {args.image2_path}")
     print(f"CSV dir: {csv_dir}")
     print(f"Solution: {args.solution_index}")
+    print(f"Inverse: {args.inverse}")
     print(f"Adjust canvas: {args.adjust_canvas}")
     print()
     
@@ -553,23 +572,39 @@ def main():
         # Execute all steps
         img1, img2 = step1_load_images(img1_path, img2_path)
         
-        transformation_matrix = step2_read_transformation_matrix(csv_path, args.solution_index)
+        transformation_matrix = step2_read_and_process_transformation_matrix(csv_path, args.solution_index, args.inverse)
+        
+        # Determine which image to transform based on inverse flag
+        if args.inverse:
+            # Transform img2 to align with img1
+            img_to_transform = img2
+            reference_img = img1
+            transform_name = "img2"
+            reference_name = "img1"
+            print(f"\nINVERSE MODE: Transforming {transform_name} to align with {reference_name}")
+        else:
+            # Transform img1 to align with img2 (default)
+            img_to_transform = img1
+            reference_img = img2
+            transform_name = "img1"
+            reference_name = "img2"
+            print(f"\nNORMAL MODE: Transforming {transform_name} to align with {reference_name}")
         
         rotation_angle_deg = step3a_extract_rotation_angle(transformation_matrix)
         
-        rotated_img1 = step3b_rotate_image1(img1, rotation_angle_deg, args.adjust_canvas)
+        rotated_img = step3b_rotate_image(img_to_transform, rotation_angle_deg, args.adjust_canvas, transform_name)
         
         translation_matrix = step3c_create_translation_matrix(transformation_matrix)
         
-        transformed_image = step3d_apply_translation(rotated_img1, translation_matrix, args.adjust_canvas)
+        transformed_image = step3d_apply_translation(rotated_img, translation_matrix, args.adjust_canvas, transform_name)
         
-        original_blend, colormap_blend = step4_blend_images(transformed_image, img2, args.adjust_canvas)
+        original_blend, colormap_blend = step4_blend_images(transformed_image, reference_img, args.adjust_canvas, transform_name, reference_name)
         
         # Save results
         print("\n=== SAVING RESULTS ===")
         
-        original_path = output_dir / "original_blend.png"
-        colormap_path = output_dir / "colormap_blend.png"
+        original_path = output_dir / "original_blend.jpg"
+        colormap_path = output_dir / "colormap_blend.jpg"
         
         cv2.imwrite(str(original_path), original_blend)
         cv2.imwrite(str(colormap_path), colormap_blend)
