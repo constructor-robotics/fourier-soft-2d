@@ -208,22 +208,35 @@ RUN mkdir -p /workspace/input && \
 
 # Verify build directory exists in final image
 RUN echo "=== Final verification - build directory and symbolic links ===" && \
-    ls -la /workspace/src/build/ 2>/dev/null || echo "Build directory missing!" && \
-    echo "=== Checking symbolic links in /workspace ===" && \
-    ls -la /workspace/ | grep -E "(fourier_soft2D|imageStitching|plotRegistrationSolution)" || echo "Symbolic links missing!"
+    ls -la /workspace/src/build/ 2>/dev/null || echo "Build directory missing!"
 
-# Set default command that shows available programs
+# RUN echo "=== Checking symbolic links in /workspace ===" && \
+#     ls -la /workspace/ | grep -E "(fourier_soft2D|imageStitching|plotRegistrationSolution)" || echo "Symbolic links missing!"
+
+# Set default command that shows available programs and starts FastAPI
 # CMD echo "=== Available Programs in /workspace ===" && \
 #     echo "C++ Executable:" && \
 #     ls -la /workspace/fourier_soft2D 2>/dev/null || echo "  fourier_soft2D - NOT FOUND" && \
 #     echo "Python Scripts:" && \
 #     ls -la /workspace/imageStitching.py 2>/dev/null || echo "  imageStitching.py - NOT FOUND" && \
 #     ls -la /workspace/plotRegistrationSolution.py 2>/dev/null || echo "  plotRegistrationSolution.py - NOT FOUND" && \
-#     echo "=== Ready for use! ===" && \
-#     /bin/bash
+#     echo "=== Setting up permissions for mounted volumes ===" && \
+#     mkdir -p /workspace/input /workspace/output /workspace/datasets && \
+#     chown -R tester:tester /workspace/input /workspace/output /workspace/datasets 2>/dev/null || true && \
+#     chmod -R 755 /workspace/input /workspace/output /workspace/datasets 2>/dev/null || true && \
+#     echo "=== Starting FastAPI application ===" && \
+#     cd /workspace && \
+#     uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 
-# Set default command
-CMD ["/bin/bash"]
+# Add health check to verify FastAPI is running -- This is not necessary if docker compose is used
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8080/health || exit 1
+
+# Set default command to start FastAPI application
+#WORKDIR /workspace/src/ws-api
+CMD cd /workspace/src/ws-api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+#CMD uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+#CMD ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8080"]
 
 # Labels for documentation
 LABEL maintainer="Arturo Gomez-Chavez <agomezchav@constructor.university>"

@@ -20,6 +20,14 @@ services:
     stdin_open: true
     tty: true
 
+    # Health check configuration (optional override of Dockerfile HEALTHCHECK)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
     # Optional: Set environment variables
     # environment:
     #  - DISPLAY=${DISPLAY:-:0}
