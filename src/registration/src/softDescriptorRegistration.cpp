@@ -193,6 +193,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoPCL2D(pcl::PointClo
 
 
     //calc Voxel registration
+    int _bestSolutionIndex = -1; // This will be set to the index of the best solution found
     Eigen::Matrix4d estimatedTransformation = this->registrationOfTwoVoxelsSOFTFast(voxelData1Input,
                                                                                     voxelData2Input,
                                                                                     initialGuess,
@@ -200,6 +201,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoPCL2D(pcl::PointClo
                                                                                     useInitialTranslation,
                                                                                     cellSize,
                                                                                     outputDir,
+                                                                                    _bestSolutionIndex,
                                                                                     debug);
     free(voxelData1Input);
     free(voxelData2Input);
@@ -581,6 +583,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
                                                                             bool useInitialTranslation,
                                                                             double cellSize,
                                                                             std::string outputDir,
+                                                                            int& bestSolutionIndex,
                                                                             bool debug) {
 
 
@@ -799,5 +802,6 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
         transformationFile.close();
     }
 
+    bestSolutionIndex = (int) distanceToMaxElement;
     return listOfTransformations[distanceToMaxElement];//robot transformation matrix from 1 to 2
 }

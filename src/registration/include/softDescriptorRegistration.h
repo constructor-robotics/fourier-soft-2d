@@ -121,6 +121,7 @@ public:
                                                     bool useInitialTranslation,
                                                     double cellSize,
                                                     std::string outputDir,
+                                                    int& bestSolutionIndex,
                                                     bool debug = false);
 
 private://here everything is created. malloc is done in the constructor

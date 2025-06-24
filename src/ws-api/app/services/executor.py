@@ -4,6 +4,7 @@ import time
 import logging
 from pathlib import Path
 from typing import Dict, Any, List
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -79,18 +80,42 @@ class WorkspaceServiceExecutor:
             stderr_str = stderr.decode().strip()
             
             if process.returncode == 0:
-                return {
-                    "success": True,
-                    "message": f"{service_name} executed successfully",
-                    "output": stdout_str,
-                    "execution_time": execution_time
-                }
+                if service_name == "Fourier Soft 2D":
+                    try:
+                        # Get the last line and try to parse it as JSON
+                        lines = stdout_str.strip().split('\n')
+                        last_line = lines[-1] if lines else ""
+                        result = json.loads(last_line)
+                        solution_index = int(result["solution_index"])
+
+                        return {
+                            "success": True,
+                            "message": f"{service_name} executed successfully",
+                            "solution_index": solution_index,
+                            "logs_output": stdout_str,
+                            "execution_time": execution_time
+                        }
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        return {
+                            "success": False,
+                            "message": "Could not parse JSON result",
+                            "solution_index": None,
+                            "logs_output": stdout_str,
+                            "execution_time": execution_time
+                        }
+                else:
+                    return {
+                        "success": True,
+                        "message": f"{service_name} executed successfully",
+                        "logs_output": stdout_str if stdout_str else None,
+                        "execution_time": execution_time
+                    }
             else:
                 return {
                     "success": False,
                     "message": f"{service_name} failed with return code {process.returncode}",
                     "error": stderr_str,
-                    "output": stdout_str if stdout_str else None,
+                    "logs output": stdout_str if stdout_str else None,
                     "execution_time": execution_time
                 }
                 

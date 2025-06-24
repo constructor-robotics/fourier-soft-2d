@@ -29,7 +29,15 @@ from enum import Enum
 class ServiceResponse(BaseModel):
     success: bool
     message: str
-    output: Optional[str] = None
+    logs_output: Optional[str] = None
+    error: Optional[str] = None
+    execution_time: Optional[float] = None
+
+class FourierSoft2DResponse(BaseModel):
+    success: bool
+    message: str
+    solution_index: Optional[int] = None  # Best solution index
+    logs_output: Optional[str] = None
     error: Optional[str] = None
     execution_time: Optional[float] = None
 

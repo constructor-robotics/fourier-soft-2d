@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.schemas import (
-    ServiceResponse, 
+    ServiceResponse,
+    FourierSoft2DResponse, 
     FourierSoft2DRequest, 
     ImageStitchingRequest, 
     PlotRegistrationRequest
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 executor = WorkspaceServiceExecutor()
 
-@router.post("/fourier-soft2d", response_model=ServiceResponse)
+@router.post("/fourier-soft2d", response_model=FourierSoft2DResponse)
 async def run_fourier_soft2d(request: FourierSoft2DRequest):
     """
     Execute fourier_soft2D C++ program for image registration. 
@@ -31,7 +32,7 @@ async def run_fourier_soft2d(request: FourierSoft2DRequest):
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result)
     
-    return ServiceResponse(**result)
+    return FourierSoft2DResponse(**result)
 
 @router.post("/plot-registration", response_model=ServiceResponse)
 async def run_plot_registration(request: PlotRegistrationRequest):

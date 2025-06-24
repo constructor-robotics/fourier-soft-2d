@@ -280,12 +280,14 @@ int main(int argc, char **argv) {
 
     // Perform registration
     // use initial guess yes/no Currently set to no. Therefore, global registration is happening.
+    int bestSolutionIndex = -1; // This will be set to the index of the best solution found
     Eigen::Matrix4d estimatedTransformation = scanRegistrationObject.registrationOfTwoVoxelsSOFTFast(voxelData1,
                                                                                                       voxelData2,
                                                                                                       Eigen::Matrix4d::Identity(),
                                                                                                       false, false,
                                                                                                       1,
                                                                                                       fullOutputDir,
+                                                                                                      bestSolutionIndex,
                                                                                                      debug);
 
     std::cout << "\nEstimated Transformation:" << std::endl;
@@ -296,6 +298,8 @@ int main(int argc, char **argv) {
 
     std::cout << "Registration completed successfully!" << std::endl;
     std::cout << "Results saved in: " << fullOutputDir << std::endl;
+     // Output JSON result as the very last line
+    std::cout << "{\"solution_index\":" << bestSolutionIndex << "}" << std::endl;
 
     return 0;
 }
