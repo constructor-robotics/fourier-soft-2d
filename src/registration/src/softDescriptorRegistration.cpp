@@ -715,7 +715,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
 
         // Write all collected data to single CSV file
         std::ofstream csvFile;
-        csvFile.open(outputDir + "/registration_results.csv");
+        csvFile.open(outputDir + "/registration_logs.csv");
         
         // Build header dynamically
         std::vector<std::string> headers;

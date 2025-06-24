@@ -18,7 +18,7 @@ class WorkspaceServiceExecutor:
     
     def _build_fourier_command(self, request) -> List[str]:
         """Build command for fourier_soft2D executable"""
-        cmd = [self.fourier_soft2d, request.first_image, request.second_image]
+        cmd = [self.fourier_soft2d, request.image1_path, request.image2_path]
         
         if request.output_dir:
             cmd.extend(["--output-dir", request.output_dir])

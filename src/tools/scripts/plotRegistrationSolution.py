@@ -68,7 +68,7 @@ def get_latest_timestamp_folder(base_dir):
 def check_debug_mode(folder_path):
     """Check if the folder contains debug files to determine debug mode"""
     rotation_file = os.path.join(folder_path, "rotation_analysis_results.csv")
-    registration_file = os.path.join(folder_path, "registration_results.csv")
+    registration_file = os.path.join(folder_path, "registration_logs.csv")
     
     return os.path.exists(rotation_file) and os.path.exists(registration_file)
 
@@ -155,7 +155,7 @@ def main():
         # Read data from all CSV files (debug mode)
         try:
             rotation_data = pd.read_csv(os.path.join(name_of_folder, "rotation_analysis_results.csv"))
-            registration_data = pd.read_csv(os.path.join(name_of_folder, "registration_results.csv"))
+            registration_data = pd.read_csv(os.path.join(name_of_folder, "registration_logs.csv"))
         except FileNotFoundError as e:
             print(f"Error: Required debug CSV file not found: {e}")
             return
@@ -373,71 +373,73 @@ def generate_debug_visualizations(name_of_folder, magnitude_fftw1, phase_fftw1, 
     plt.close()
     
     # Save Figure 8: Correlation matrices for all solutions
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    axes = axes.flatten()
+    if number_of_solutions > 0:    
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        axes = axes.flatten()
     
-    for i in range(number_of_solutions):
-        correlation_column = f"resultingCorrelationShift{i}"
-        if correlation_column in registration_data.columns:
-            correlation_matrix_shift_1d = registration_data[correlation_column].dropna().values
-            
-            result_size = int(np.round(len(correlation_matrix_shift_1d) ** (1/2)))
-            correlation_matrix_shift_2d = correlation_matrix_shift_1d.reshape(result_size, result_size)
-            
-            if i < len(axes):
-                im = axes[i].imshow(correlation_matrix_shift_2d, cmap='viridis')
-                axes[i].set_title(f'Solution {i+1}')
-                axes[i].set_aspect('equal')
-                plt.colorbar(im, ax=axes[i])
-        else:
-            print(f"Warning: Column {correlation_column} not found in registration_results.csv")
-    
-    plt.tight_layout()
-    plt.savefig(f"{name_of_folder}/correlation_matrices.png", dpi=300, bbox_inches='tight')
-    plt.close()
+        for i in range(min(number_of_solutions,4)):
+            correlation_column = f"resultingCorrelationShift{i}"
+            if correlation_column in registration_data.columns:
+                correlation_matrix_shift_1d = registration_data[correlation_column].dropna().values
+                
+                result_size = int(np.round(len(correlation_matrix_shift_1d) ** (1/2)))
+                correlation_matrix_shift_2d = correlation_matrix_shift_1d.reshape(result_size, result_size)
+                
+                if i < len(axes):
+                    im = axes[i].imshow(correlation_matrix_shift_2d, cmap='viridis')
+                    axes[i].set_title(f'Solution {i+1}')
+                    axes[i].set_aspect('equal')
+                    plt.colorbar(im, ax=axes[i])
+            else:
+                print(f"Warning: Column {correlation_column} not found in registration_logs.csv")
+        
+        plt.tight_layout()
+        plt.savefig(f"{name_of_folder}/correlation_matrices.png", dpi=300, bbox_inches='tight')
+        plt.close()
     
     # Save Figure 9: Registration results (blended voxels)
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    axes = axes.flatten()
-    
-    for i in range(number_of_solutions):
-        voxel1_column = f"resultVoxel1{i}"
-        voxel2_column = f"resultVoxel2{i}"
+    if number_of_solutions > 0:
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        axes = axes.flatten()
         
-        if voxel1_column in registration_data.columns and voxel2_column in registration_data.columns:
-            result_voxel1_tmp = registration_data[voxel1_column].dropna().values
-            result_voxel2_tmp = registration_data[voxel2_column].dropna().values
+        for i in range(number_of_solutions):
+            voxel1_column = f"resultVoxel1{i}"
+            voxel2_column = f"resultVoxel2{i}"
             
-            voxel_result1 = np.zeros((N, N))
-            voxel_result2 = np.zeros((N, N))
-            
-            for j in range(N):
-                for k in range(N):
-                    voxel_result1[j,k] = result_voxel1_tmp[k * N - N + j]
-                    voxel_result2[j,k] = result_voxel2_tmp[k * N - N + j]
-            
-            # Normalize data for blending
-            voxel1_norm = cv2.normalize(voxel_result1.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
-            voxel2_norm = cv2.normalize(voxel_result2.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
-            
-            # Convert to 3-channel for color blending
-            voxel1_color = cv2.applyColorMap(voxel1_norm.astype(np.uint8), cv2.COLORMAP_HOT)
-            voxel2_color = cv2.applyColorMap(voxel2_norm.astype(np.uint8), cv2.COLORMAP_COOL)
-            
-            # Blend the images
-            blended = cv2.addWeighted(voxel1_color, 0.5, voxel2_color, 0.5, 0)
-            
-            if i < len(axes):
-                axes[i].imshow(cv2.cvtColor(blended, cv2.COLOR_BGR2RGB))
-                axes[i].set_title(f'Registration Result {i+1}')
-                axes[i].set_aspect('equal')
-                axes[i].axis('off')
-        else:
-            print(f"Warning: Columns {voxel1_column} or {voxel2_column} not found in registration_results.csv")
-    
-    plt.tight_layout()
-    plt.savefig(f"{name_of_folder}/registration_results.png", dpi=300, bbox_inches='tight')
-    plt.close()
+            if voxel1_column in registration_data.columns and voxel2_column in registration_data.columns:
+                result_voxel1_tmp = registration_data[voxel1_column].dropna().values
+                result_voxel2_tmp = registration_data[voxel2_column].dropna().values
+                
+                voxel_result1 = np.zeros((N, N))
+                voxel_result2 = np.zeros((N, N))
+                
+                for j in range(N):
+                    for k in range(N):
+                        voxel_result1[j,k] = result_voxel1_tmp[k * N - N + j]
+                        voxel_result2[j,k] = result_voxel2_tmp[k * N - N + j]
+                
+                # Normalize data for blending
+                voxel1_norm = cv2.normalize(voxel_result1.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
+                voxel2_norm = cv2.normalize(voxel_result2.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX)
+                
+                # Convert to 3-channel for color blending
+                voxel1_color = cv2.applyColorMap(voxel1_norm.astype(np.uint8), cv2.COLORMAP_HOT)
+                voxel2_color = cv2.applyColorMap(voxel2_norm.astype(np.uint8), cv2.COLORMAP_COOL)
+                
+                # Blend the images
+                blended = cv2.addWeighted(voxel1_color, 0.5, voxel2_color, 0.5, 0)
+                
+                if i < len(axes):
+                    axes[i].imshow(cv2.cvtColor(blended, cv2.COLOR_BGR2RGB))
+                    axes[i].set_title(f'Registration Result {i+1}')
+                    axes[i].set_aspect('equal')
+                    axes[i].axis('off')
+            else:
+                print(f"Warning: Columns {voxel1_column} or {voxel2_column} not found in registration_logs.csv")
+        
+        plt.tight_layout()
+        plt.savefig(f"{name_of_folder}/registration_results.png", dpi=300, bbox_inches='tight')
+        plt.close()
 
 def generate_transformation_visualization(name_of_folder, transformation_data, best_solution):
     """Generate transformation matrix visualization (available in both debug and non-debug modes)"""    # Display and visualize transformation matrices

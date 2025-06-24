@@ -35,8 +35,8 @@ class ServiceResponse(BaseModel):
 
 # Fourier Soft 2D Schemas
 class FourierSoft2DRequest(BaseModel):
-    first_image: str  # Path to first image
-    second_image: str  # Path to second image
+    image1_path: str  # Path to first image
+    image2_path: str  # Path to second image
     output_dir: Optional[str] = None  # Optional output directory name
     dimensions: Optional[int] = None  # Image dimensions (must be power of 2)
     debug: Optional[bool] = False  # Enable debug mode

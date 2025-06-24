@@ -30,6 +30,50 @@ def find_latest_output_directory(base_dir="/workspace/output"):
     
     return latest_dir
 
+def determine_csv_path(csv_dir_path=None, base_dir="/workspace/output"):
+    """
+    Determine the CSV file path based on user input.
+    
+    Args:
+        csv_dir_path (str): User provided CSV directory or file path (relative to base_dir)
+        base_dir (str): Base directory for all operations
+        
+    Returns:
+        Path: Full path to the CSV file
+    """
+    base_path = Path(base_dir)
+    
+    if not base_path.exists():
+        raise ValueError(f"Base directory does not exist: {base_dir}")
+    
+    if csv_dir_path is None:
+        # Case 3: No path given, find latest timestamped directory
+        print("No CSV path specified, searching for latest timestamped directory...")
+        csv_dir = find_latest_output_directory(base_dir)
+        csv_file = csv_dir / 'registration_solutions_transformation.csv'
+    else:
+        # Convert to Path object relative to base_dir
+        user_path = base_path / csv_dir_path
+        
+        if user_path.is_file() and user_path.suffix == '.csv':
+            # Case 1: Specific CSV file provided
+            print(f"Using specific CSV file: {user_path}")
+            csv_file = user_path
+        elif user_path.is_dir():
+            # Case 2: Directory provided, look for expected CSV file
+            print(f"Using directory: {user_path}")
+            csv_file = user_path / 'registration_solutions_transformation.csv'
+        else:
+            # Try to interpret as directory path even if it doesn't exist yet
+            print(f"Treating as directory path: {user_path}")
+            csv_file = user_path / 'registration_solutions_transformation.csv'
+    
+    if not csv_file.exists():
+        raise ValueError(f"CSV file not found: {csv_file}")
+    
+    print(f"Using CSV file: {csv_file}")
+    return csv_file
+
 def calculate_rotation_canvas_size(image_shape, rotation_angle_deg):
     """
     Calculate the canvas size needed to fit the entire rotated image.
@@ -538,20 +582,15 @@ def main():
     img1_path = input_dir / args.image1_path
     img2_path = input_dir / args.image2_path
     
-    # Handle CSV directory - use latest timestamped dir if not provided
-    if args.csv_dir_path is None:
-        print("No CSV directory specified, searching for latest timestamped directory...")
-        csv_dir = find_latest_output_directory()
-    else:
-        csv_dir = output_dir / Path(args.csv_dir_path) 
-    
-    csv_path = csv_dir / 'registration_solutions_transformation.csv'
-    output_dir = csv_dir
+    # Determine CSV file path based on user input
+    csv_path = determine_csv_path(args.csv_dir_path)
+    output_dir = csv_path.parent  # Output in same directory as CSV file
     
     print("=== SYSTEMATIC IMAGE STITCHING ===")
     print(f"Image 1: {args.image1_path}")
     print(f"Image 2: {args.image2_path}")
-    print(f"CSV dir: {csv_dir}")
+    print(f"CSV file: {csv_path}")
+    print(f"Output dir: {output_dir}")
     print(f"Solution: {args.solution_index}")
     print(f"Inverse: {args.inverse}")
     print(f"Adjust canvas: {args.adjust_canvas}")
@@ -603,8 +642,8 @@ def main():
         # Save results
         print("\n=== SAVING RESULTS ===")
         
-        original_path = output_dir / "original_blend.jpg"
-        colormap_path = output_dir / "colormap_blend.jpg"
+        original_path = output_dir / "stitched_originals_blend.png"
+        colormap_path = output_dir / "stitched_colormaps_blend.png"
         
         cv2.imwrite(str(original_path), original_blend)
         cv2.imwrite(str(colormap_path), colormap_blend)
