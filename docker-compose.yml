@@ -8,6 +8,8 @@ services:
         GROUP_ID: ${GROUP_ID:-1000}
     image: ubuntu-pcl-dev:20.04
     container_name: fourier-sof-2d
+    ports:
+      - "8090:8080"  # For FastAPI
     volumes:
       # Mount input files directory (PCD files, images, etc.)
       - ./input:/workspace/input
