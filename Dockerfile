@@ -83,7 +83,9 @@ RUN apt-get update && apt-get install -y \
     python3-matplotlib \
     python3-opencv\
     python3-scipy \
-    python3-pandas
+    python3-pandas \
+    ca-certificates \
+    && python3 -m pip install --upgrade pip setuptools wheel
 
 # FFTW3 (Fast Fourier Transform library)
 RUN apt-get update && apt-get install -y \
@@ -100,6 +102,29 @@ RUN apt-get update && apt-get install -y \
     # Qt5 for CGAL GUI components (optional)
     qtbase5-dev \
     libqt5opengl5-dev
+
+# Python packages for API development
+# RUN python3 -m pip install -timeout=60 --retries=3 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
+#     fastapi==0.104.1 \
+#     "uvicorn[standard]==0.24.0" \
+#     python-multipart==0.0.6 \
+#     pydantic-settings==2.1.0
+
+
+# Copy requirements file and install all Python packages
+COPY requirements.txt /tmp/requirements.txt
+RUN echo "=== Installing Python packages from requirements.txt ===" && \
+    python3 -m pip install --timeout=120 --retries=5 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r /tmp/requirements.txt && \
+    echo "=== Checking installed packages ===" && \
+    python3 -m pip list && \
+    echo "=== Checking Python paths ===" && \
+    python3 -c "import sys; print('\n'.join(sys.path))" && \
+    echo "=== Testing imports immediately after installation ===" && \
+    rm /tmp/requirements.txt
+
+# # Alternative installation method if requirements.txt fails
+# RUN echo "=== Backup installation method ===" && \
+#     /usr/bin/python3 -m pip install --user fastapi==0.104.1 uvicorn[standard]==0.24.0 || true
 
 # Additional useful tools
 RUN apt-get update && apt-get install -y \
@@ -125,7 +150,7 @@ RUN groupadd -r tester -g ${GROUP_ID} && \
 RUN mkdir -p /workspace && \
     chown -R tester:tester /workspace
 
-# Verify installations
+# Verify installations BEFORE copying and compiling source code
 RUN echo "=== Verifying library installations ===" && \
     (cmake --version | head -1 && echo "✓ CMake 3.21.1 installed") || echo "✗ CMake NOT properly installed" && \
     (pkg-config --modversion pcl_common-1.10 && echo "✓ PCL installed") || echo "✗ PCL NOT properly installed" && \
@@ -134,7 +159,15 @@ RUN echo "=== Verifying library installations ===" && \
     (gcc -fopenmp --version >/dev/null 2>&1 && echo "✓ OpenMP support available") || echo "✗ OpenMP NOT available" && \
     (find /usr -name "CGAL" -type d 2>/dev/null | head -1 >/dev/null && echo "✓ CGAL installed") || echo "✗ CGAL NOT properly installed" && \
     (python3 --version && echo "✓ Python3 installed") || echo "✗ Python3 NOT installed" && \
-    (python3 -c "import numpy, cv2, matplotlib, scipy, pandas; print('✓ Python libraries installed')" 2>/dev/null) || echo "✗ Python libraries NOT properly installed"
+    (python3 -c "import numpy, cv2, matplotlib, scipy, pandas; print('✓ Python libraries installed')" 2>/dev/null) || echo "✗ Python libraries NOT properly installed" && \
+    echo "=== Final FastAPI verification ===" && \
+    echo "Current PYTHONPATH: $PYTHONPATH" && \
+    python3 -c "import sys; print('Python executable:', sys.executable)" && \
+    python3 -c "import sys; print('Python version:', sys.version)" && \
+    python3 -m pip show fastapi && \
+    python3 -m pip show uvicorn && \
+    (python3 -c "import fastapi" && echo "✓ FastAPI imported successfully") || echo "✗ FastAPI import failed" && \
+    (python3 -c "import uvicorn" && echo "✓ Uvicorn imported successfully") || echo "✗ Uvicorn import failed"
 
 # Copy source code from host src/ directory to container
 COPY --chown=tester:tester ./src /workspace/src
