@@ -2,30 +2,6 @@ from pydantic import BaseModel
 from typing import Optional, List
 from enum import Enum
 
-# class ItemBase(BaseModel):
-#     title: str
-#     description: Optional[str] = None
-
-# class ItemCreate(ItemBase):
-#     pass
-
-# class Item(ItemBase):
-#     id: int
-    
-# class Config:
-#     from_attributes = True
-
-# class ServiceRequest(BaseModel):
-#     string_param: str
-#     int_param: int
-
-# class ServiceResponse(BaseModel):
-#     success: bool
-#     message: str
-#     output: Optional[str] = None
-#     error: Optional[str] = None
-#     execution_time: Optional[float] = None
-
 class ServiceResponse(BaseModel):
     success: bool
     message: str
@@ -66,3 +42,9 @@ class ImageStitchingRequest(BaseModel):
 # Plot Registration Solution Schemas
 class PlotRegistrationRequest(BaseModel):
     folder_name: Optional[str] = None  # Folder name under /workspace/output
+
+# Health check response
+class HealthCheckResponse(BaseModel):
+    status: str
+    executables: dict
+    timestamp: Optional[str] = None

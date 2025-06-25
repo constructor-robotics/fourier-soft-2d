@@ -58,8 +58,8 @@ async def run_plot_registration(request: PlotRegistrationRequest):
 @router.post("/image-stitching", response_model=ServiceResponse)
 async def run_image_stitching(request: ImageStitchingRequest):
     """
-    Execute imageStitching.py for image stitching operations.
-    The method applies the transformation from Image 1 to Image 2, unless inverse is set to true.
+    Execute imageStitching.py for image stitching operations.\n
+    The method applies the transformation from Image 1 to Image 2, unless inverse is set to true.\n
     **Output**: The stitched images: 'stitched_originals_blend.png' and 'stitched_colormaps_blend.png' are saved in the /output directory.
     If scaling is enabled, filenames include scaling suffix (e.g., 'stitched_originals_blend_scaled_0.500x0.500.png').
 
@@ -73,7 +73,7 @@ async def run_image_stitching(request: ImageStitchingRequest):
     - **sx**: [Optional] Manual scaling factor in x direction | Used only when doscale=true | If not provided, automatically extracted from experiment_task_logs.csv
     - **sy**: [Optional] Manual scaling factor in y direction | Used only when doscale=true | If not provided, automatically extracted from experiment_task_logs.csv
     """
-    
+
     logger.info(f"Executing Image Stitching with images: {request.image1_path}, {request.image2_path}")
     
     result = await executor.run_image_stitching(request)

@@ -107,7 +107,7 @@ class WorkspaceServiceExecutor:
                             "success": False,
                             "message": "Could not parse JSON result",
                             "solution_index": None,
-                            "logs_output": stdout_str,
+                            "logs_output": stdout_str if stdout_str else None,
                             "execution_time": execution_time
                         }
                 else:
