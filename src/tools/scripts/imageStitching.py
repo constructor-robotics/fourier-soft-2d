@@ -1,3 +1,32 @@
+#!/usr/bin/env python3
+"""
+Enhanced Image Stitching Script with Scaling Support
+
+New features:
+- --doscale flag to enable scaling compensation
+- --sx and --sy flags for manual scaling factors
+- Automatic scaling factor extraction from experiment_task_logs.csv
+- Scaling matrix application to transformation matrix
+
+Steps:
+1. Load image 1 and image 2 from user input
+2. Read transformation matrix from CSV file
+3. [NEW] If --doscale is true, apply scaling compensation to transformation matrix
+4. From transformation matrix:
+   a. Extract rotation matrix and calculate angle
+   b. Rotate image using cv2.warpAffine()
+   c. Create translational affine_matrix from CSV values
+   d. Apply translation to rotated image
+   e. Result = transformed_image
+5. Blend transformed_image with reference image (with and without colormaps)
+"""
+
+import numpy as np
+import cv2
+import pandas as pd
+import argparse
+from pathlib import Path
+
 def find_latest_output_directory(base_dir="/workspace/output"):
     """
     Find the directory with the latest unix timestamp name in the base directory.
@@ -73,6 +102,101 @@ def determine_csv_path(csv_dir_path=None, base_dir="/workspace/output"):
     
     print(f"Using CSV file: {csv_file}")
     return csv_file
+
+def extract_scaling_factors_from_logs(output_dir, sx=None, sy=None, source_width=None, source_height=None):
+    """
+    Extract scaling factors from experiment_task_logs.csv or use provided values.
+    
+    Args:
+        output_dir (Path): Output directory containing the logs
+        sx (float): Manual scaling factor in x (optional)
+        sy (float): Manual scaling factor in y (optional)
+        
+    Returns:
+        tuple: (sx, sy) scaling factors
+    """
+    print("\n=== EXTRACTING SCALING FACTORS ===")
+    
+    if sx is not None and sy is not None:
+        print(f"Using manually provided scaling factors: sx={sx}, sy={sy}")
+        return sx, sy
+    
+    # Read from experiment_task_logs.csv
+    logs_path = output_dir / 'experiment_task_logs.csv'
+    
+    if not logs_path.exists():
+        raise ValueError(f"experiment_task_logs.csv not found in {output_dir}")
+    
+    print(f"Reading scaling factors from: {logs_path}")
+    
+    try:
+        logs_df = pd.read_csv(logs_path)
+        
+        if len(logs_df) == 0:
+            raise ValueError("experiment_task_logs.csv is empty")
+        
+        # Use the first (most recent) row
+        row = logs_df.iloc[0]
+        
+        # original_width = row['original_img1_width']
+        # original_height = row['original_img1_height']
+        scaled_width = row['scaled_width']
+        scaled_height = row['scaled_height']
+        
+        # Calculate scaling factors
+        sx_calculated = source_width / scaled_width
+        sy_calculated = source_height / scaled_height
+        
+        print(f"Original image size: {source_width}x{source_height}")
+        print(f"Scaled image size: {scaled_width}x{scaled_height}")
+        print(f"Calculated scaling factors: sx={sx_calculated:.4f}, sy={sy_calculated:.4f}")
+        
+        return sx_calculated, sy_calculated
+        
+    except Exception as e:
+        raise ValueError(f"Error reading experiment_task_logs.csv: {e}")
+
+def apply_scaling_to_transformation_matrix(transformation_matrix, sx, sy):
+    """
+    Apply scaling compensation to the transformation matrix.
+    
+    The scaling is applied to the important 3x3 section of the transformation matrix.
+    This compensates for the difference in scale between the original images used for
+    registration and the current input images.
+    
+    Args:
+        transformation_matrix (np.ndarray): Original 4x4 transformation matrix
+        sx (float): Scaling factor in x
+        sy (float): Scaling factor in y
+        
+    Returns:
+        np.ndarray: Scaled 4x4 transformation matrix
+    """
+    print(f"\n=== APPLYING SCALING TO TRANSFORMATION MATRIX ===")
+    print(f"Scaling factors: sx={sx:.4f}, sy={sy:.4f}")
+    
+    # Create scaling matrix
+    scaling_matrix = np.array([
+        [sx,  0,  0, 0],
+        [0,  sy,  0, 0],
+        [0,   0,  1, 0],
+        [0,   0,  0, 1]
+    ])
+    
+    print("Scaling matrix:")
+    print(scaling_matrix)
+    
+    print("Original transformation matrix:")
+    print(transformation_matrix)
+    
+    # Apply scaling to the transformation matrix
+    # The scaling affects the translation components and potentially rotation
+    scaled_transformation_matrix = scaling_matrix @ transformation_matrix
+    
+    print("Scaled transformation matrix:")
+    print(scaled_transformation_matrix)
+    
+    return scaled_transformation_matrix
 
 def calculate_rotation_canvas_size(image_shape, rotation_angle_deg):
     """
@@ -193,27 +317,7 @@ def expand_image_to_canvas(image, target_width, target_height):
     if start_x >= 0 and start_y >= 0:
         expanded[start_y:end_y, start_x:end_x] = image[0:(end_y-start_y), 0:(end_x-start_x)]
     
-    return expanded#!/usr/bin/env python3
-"""
-Image Stitching Script - Systematic Implementation
-
-Steps:
-1. Load image 1 and image 2 from user input
-2. Read transformation matrix from CSV file
-3. From transformation matrix:
-   a. Extract rotation matrix and calculate angle
-   b. Rotate image1 using cv2.warpAffine()
-   c. Create translational affine_matrix from CSV values
-   d. Apply translation to rotated image1
-   e. Result = transformed_image
-4. Blend transformed_image with image2 (with and without colormaps)
-"""
-
-import numpy as np
-import cv2
-import pandas as pd
-import argparse
-from pathlib import Path
+    return expanded
 
 def step1_load_images(img1_path, img2_path):
     """
@@ -288,9 +392,39 @@ def step2_read_and_process_transformation_matrix(csv_path, solution_index=0, inv
     else:
         return transformation_matrix
 
-def step3a_extract_rotation_angle(transformation_matrix):
+def step3_apply_scaling_compensation(transformation_matrix, output_dir, do_scale, sx=None, sy=None, source_width=None, source_height=None):
     """
-    Step 3a: Extract rotation matrix and calculate estimated angle
+    Step 3: Apply scaling compensation to transformation matrix if enabled
+    
+    Args:
+        transformation_matrix (np.ndarray): Original transformation matrix
+        output_dir (Path): Output directory for reading logs
+        do_scale (bool): Whether to apply scaling
+        sx (float): Manual scaling factor in x (optional)
+        sy (float): Manual scaling factor in y (optional)
+        
+    Returns:
+        np.ndarray: Transformation matrix (scaled if do_scale=True, original otherwise)
+    """
+    if not do_scale:
+        print("\n=== STEP 3: Scaling compensation disabled ===")
+        return transformation_matrix
+    
+    print("\n=== STEP 3: Applying Scaling Compensation ===")
+    
+    # Extract scaling factors
+    sx_final, sy_final = extract_scaling_factors_from_logs(output_dir, sx, sy, source_width, source_height)
+    
+    # Apply scaling to transformation matrix
+    scaled_transformation_matrix = apply_scaling_to_transformation_matrix(
+        transformation_matrix, sx_final, sy_final
+    )
+    
+    return scaled_transformation_matrix
+
+def step4a_extract_rotation_angle(transformation_matrix):
+    """
+    Step 4a: Extract rotation matrix and calculate estimated angle
     
     Args:
         transformation_matrix (np.ndarray): 4x4 transformation matrix
@@ -298,7 +432,7 @@ def step3a_extract_rotation_angle(transformation_matrix):
     Returns:
         float: Rotation angle in degrees
     """
-    print("\n=== STEP 3a: Extract Rotation Angle ===")
+    print("\n=== STEP 4a: Extract Rotation Angle ===")
     
     # Extract rotation angle from transformation matrix
     rotation_angle_rad = np.arctan2(transformation_matrix[1, 0], transformation_matrix[0, 0])
@@ -308,9 +442,9 @@ def step3a_extract_rotation_angle(transformation_matrix):
     
     return rotation_angle_deg
 
-def step3b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name="image"):
+def step4b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name="image"):
     """
-    Step 3b: Rotate image using cv2.warpAffine()
+    Step 4b: Rotate image using cv2.warpAffine()
     
     Args:
         img (np.ndarray): Image to rotate
@@ -321,7 +455,7 @@ def step3b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name
     Returns:
         np.ndarray: Rotated image
     """
-    print(f"\n=== STEP 3b: Rotating {image_name} ===")
+    print(f"\n=== STEP 4b: Rotating {image_name} ===")
     
     height, width = img.shape[:2]
     center = (width / 2, height / 2)
@@ -367,9 +501,9 @@ def step3b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name
     
     return rotated_img
 
-def step3c_create_translation_matrix(transformation_matrix):
+def step4c_create_translation_matrix(transformation_matrix):
     """
-    Step 3c: Create translational affine_matrix from CSV values
+    Step 4c: Create translational affine_matrix from CSV values
     
     Args:
         transformation_matrix (np.ndarray): 4x4 transformation matrix
@@ -377,7 +511,7 @@ def step3c_create_translation_matrix(transformation_matrix):
     Returns:
         np.ndarray: 2x3 translation matrix
     """
-    print("\n=== STEP 3c: Creating Translation Matrix ===")
+    print("\n=== STEP 4c: Creating Translation Matrix ===")
     
     # Extract translation values
     tx = transformation_matrix[0, 3]
@@ -396,9 +530,9 @@ def step3c_create_translation_matrix(transformation_matrix):
     
     return translation_matrix
 
-def step3d_apply_translation(rotated_img, translation_matrix, adjust_canvas=False, image_name="image"):
+def step4d_apply_translation(rotated_img, translation_matrix, adjust_canvas=False, image_name="image"):
     """
-    Step 3d: Apply translation to rotated image
+    Step 4d: Apply translation to rotated image
     
     Args:
         rotated_img (np.ndarray): Rotated image
@@ -409,7 +543,7 @@ def step3d_apply_translation(rotated_img, translation_matrix, adjust_canvas=Fals
     Returns:
         np.ndarray: Transformed image (rotated + translated)
     """
-    print(f"\n=== STEP 3d: Applying Translation to {image_name} ===")
+    print(f"\n=== STEP 4d: Applying Translation to {image_name} ===")
     
     height, width = rotated_img.shape[:2]
     
@@ -452,9 +586,9 @@ def step3d_apply_translation(rotated_img, translation_matrix, adjust_canvas=Fals
     
     return transformed_image
 
-def step4_blend_images(transformed_image, reference_image, adjust_canvas=False, transform_name="img1", reference_name="img2"):
+def step5_blend_images(transformed_image, reference_image, adjust_canvas=False, transform_name="img1", reference_name="img2"):
     """
-    Step 4: Blend transformed_image with reference_image
+    Step 5: Blend transformed_image with reference_image
     Creates two versions: one with colormaps, one with original images
     
     Args:
@@ -467,7 +601,7 @@ def step4_blend_images(transformed_image, reference_image, adjust_canvas=False, 
     Returns:
         tuple: (original_blend, colormap_blend)
     """
-    print(f"\n=== STEP 4: Blending {transform_name} (transformed) with {reference_name} (reference) ===")
+    print(f"\n=== STEP 5: Blending {transform_name} (transformed) with {reference_name} (reference) ===")
     
     # Get sizes
     h1, w1 = transformed_image.shape[:2]
@@ -561,9 +695,9 @@ def step4_blend_images(transformed_image, reference_image, adjust_canvas=False, 
 
 def main():
     """
-    Main function - orchestrates all steps
+    Main function - orchestrates all steps with scaling support
     """
-    parser = argparse.ArgumentParser(description='Systematic image stitching')
+    parser = argparse.ArgumentParser(description='Enhanced image stitching with scaling support')
     parser.add_argument('image1_path', help='Path to first image relative to /workspace/input')
     parser.add_argument('image2_path', help='Path to second image relative to /workspace/input')
     parser.add_argument('--csv_dir_path', help='Path to directory containing CSV file')
@@ -573,6 +707,14 @@ def main():
                        help='Apply inverse transformation (transform img2 to img1 instead) (default: False)')
     parser.add_argument('--adjust-canvas', action='store_true',
                        help='Adjust canvas size to fit full transformation (default: False)')
+    
+    # New scaling arguments
+    parser.add_argument('--doscale', action='store_true',
+                       help='Enable scaling compensation (default: False)')
+    parser.add_argument('--sx', type=float, 
+                       help='Manual scaling factor in x direction (optional)')
+    parser.add_argument('--sy', type=float,
+                       help='Manual scaling factor in y direction (optional)')
     
     args = parser.parse_args()
     
@@ -586,7 +728,7 @@ def main():
     csv_path = determine_csv_path(args.csv_dir_path)
     output_dir = csv_path.parent  # Output in same directory as CSV file
     
-    print("=== SYSTEMATIC IMAGE STITCHING ===")
+    print("=== ENHANCED IMAGE STITCHING WITH SCALING SUPPORT ===")
     print(f"Image 1: {args.image1_path}")
     print(f"Image 2: {args.image2_path}")
     print(f"CSV file: {csv_path}")
@@ -594,6 +736,12 @@ def main():
     print(f"Solution: {args.solution_index}")
     print(f"Inverse: {args.inverse}")
     print(f"Adjust canvas: {args.adjust_canvas}")
+    print(f"Scaling enabled: {args.doscale}")
+    if args.doscale:
+        if args.sx is not None and args.sy is not None:
+            print(f"Manual scaling: sx={args.sx}, sy={args.sy}")
+        else:
+            print("Scaling: Will read from experiment_task_logs.csv")
     print()
     
     # Validate paths
@@ -608,10 +756,20 @@ def main():
         return 1
     
     try:
-        # Execute all steps
+        # ========================================
+        # EXECUTE ALL STEPS OF THE PIPELINE
+        # ========================================
+        
+        # STEP 1: Load images
         img1, img2 = step1_load_images(img1_path, img2_path)
         
+        # STEP 2: Read transformation matrix from CSV
         transformation_matrix = step2_read_and_process_transformation_matrix(csv_path, args.solution_index, args.inverse)
+        
+        # STEP 3: Apply scaling compensation if enabled (NEW FEATURE)
+        transformation_matrix = step3_apply_scaling_compensation(
+            transformation_matrix, output_dir, args.doscale, args.sx, args.sy, img1.shape[1], img1.shape[0]
+        )
         
         # Determine which image to transform based on inverse flag
         if args.inverse:
@@ -629,21 +787,36 @@ def main():
             reference_name = "img2"
             print(f"\nNORMAL MODE: Transforming {transform_name} to align with {reference_name}")
         
-        rotation_angle_deg = step3a_extract_rotation_angle(transformation_matrix)
+        # STEP 4a: Extract rotation angle from transformation matrix
+        rotation_angle_deg = step4a_extract_rotation_angle(transformation_matrix)
         
-        rotated_img = step3b_rotate_image(img_to_transform, rotation_angle_deg, args.adjust_canvas, transform_name)
+        # STEP 4b: Rotate the selected image
+        rotated_img = step4b_rotate_image(img_to_transform, rotation_angle_deg, args.adjust_canvas, transform_name)
         
-        translation_matrix = step3c_create_translation_matrix(transformation_matrix)
+        # STEP 4c: Create translation matrix from transformation matrix
+        translation_matrix = step4c_create_translation_matrix(transformation_matrix)
         
-        transformed_image = step3d_apply_translation(rotated_img, translation_matrix, args.adjust_canvas, transform_name)
+        # STEP 4d: Apply translation to the rotated image
+        transformed_image = step4d_apply_translation(rotated_img, translation_matrix, args.adjust_canvas, transform_name)
         
-        original_blend, colormap_blend = step4_blend_images(transformed_image, reference_img, args.adjust_canvas, transform_name, reference_name)
+        # STEP 5: Blend the transformed image with the reference image
+        original_blend, colormap_blend = step5_blend_images(transformed_image, reference_img, args.adjust_canvas, transform_name, reference_name)
         
-        # Save results
+        # ========================================
+        # SAVE ALL RESULTS
+        # ========================================
         print("\n=== SAVING RESULTS ===")
         
-        original_path = output_dir / "stitched_originals_blend.png"
-        colormap_path = output_dir / "stitched_colormaps_blend.png"
+        # Add scaling info to filename if scaling was applied
+        if args.doscale:
+            sx_final, sy_final = extract_scaling_factors_from_logs(output_dir, args.sx, args.sy, img1.shape[1], img1.shape[0])
+            scaling_suffix = f"_scaled_{sx_final:.3f}x{sy_final:.3f}"
+        else:
+            scaling_suffix = ""
+        
+        # Save blended images
+        original_path = output_dir / f"stitched_originals_blend{scaling_suffix}.png"
+        colormap_path = output_dir / f"stitched_colormaps_blend{scaling_suffix}.png"
         
         cv2.imwrite(str(original_path), original_blend)
         cv2.imwrite(str(colormap_path), colormap_blend)
@@ -652,8 +825,9 @@ def main():
         print(f"Colormap blend saved: {colormap_path}")
         
         print("\n=== PROCESS COMPLETE ===")
+        print("All steps executed successfully!")
         return 0
-        
+    
     except Exception as e:
         print(f"ERROR: {str(e)}")
         return 1

@@ -58,17 +58,22 @@ async def run_plot_registration(request: PlotRegistrationRequest):
 @router.post("/image-stitching", response_model=ServiceResponse)
 async def run_image_stitching(request: ImageStitchingRequest):
     """
-    Execute imageStitching.py for image stitching operations.\n
-    The method applies the transformation from Image 1 to Image 2, unless inverse is set to true.\n
-    **Output**: The stitched images: 'stitched_originals_blend.png' and 'stitched_colormaps_blend.png' is saved in the /output directory.
-    
+    Execute imageStitching.py for image stitching operations.
+    The method applies the transformation from Image 1 to Image 2, unless inverse is set to true.
+    **Output**: The stitched images: 'stitched_originals_blend.png' and 'stitched_colormaps_blend.png' are saved in the /output directory.
+    If scaling is enabled, filenames include scaling suffix (e.g., 'stitched_originals_blend_scaled_0.500x0.500.png').
+
     - **image1_path**: Path to first image | Relative to /input directory
     - **image2_path**: Path to second image | Relative to /input directory
     - **csv_dir_path**: [Optional] Path to directory containing CSV file
     - **solution_index**: [Optional] Solution index | DEFAULT: 0 | If the csv file has multiple solutions (row-based), this specifies which one to use
-    - **inverse**: [Optional] Apply inverse transformation | DEFAULT: false | 
-    - **adjust_canvas**: Adjust canvas size to fit full transformation (default: false)
+    - **inverse**: [Optional] Apply inverse transformation | DEFAULT: false | Transform img2 to align with img1 instead
+    - **adjust_canvas**: [Optional] Adjust canvas size to fit full transformation | DEFAULT: false
+    - **doscale**: [Optional] Enable scaling compensation | DEFAULT: false | Compensates for resolution differences between current images and those used for registration
+    - **sx**: [Optional] Manual scaling factor in x direction | Used only when doscale=true | If not provided, automatically extracted from experiment_task_logs.csv
+    - **sy**: [Optional] Manual scaling factor in y direction | Used only when doscale=true | If not provided, automatically extracted from experiment_task_logs.csv
     """
+    
     logger.info(f"Executing Image Stitching with images: {request.image1_path}, {request.image2_path}")
     
     result = await executor.run_image_stitching(request)

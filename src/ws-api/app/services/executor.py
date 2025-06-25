@@ -38,15 +38,22 @@ class WorkspaceServiceExecutor:
         
         if request.csv_dir_path:
             cmd.extend(["--csv_dir_path", request.csv_dir_path])
-        
         if request.solution_index is not None:
             cmd.extend(["--solution_index", str(request.solution_index)])
-        
         if request.inverse:
             cmd.append("--inverse")
-        
         if request.adjust_canvas:
             cmd.append("--adjust-canvas")
+        
+        # New scaling functionality
+        if request.doscale:
+            cmd.append("--doscale")
+            
+            # Add manual scaling factors if provided
+            if request.sx is not None:
+                cmd.extend(["--sx", str(request.sx)])
+            if request.sy is not None:
+                cmd.extend(["--sy", str(request.sy)])
         
         return cmd
     

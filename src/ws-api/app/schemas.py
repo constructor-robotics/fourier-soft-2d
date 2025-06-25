@@ -58,6 +58,11 @@ class ImageStitchingRequest(BaseModel):
     inverse: Optional[bool] = False  # Apply inverse transformation
     adjust_canvas: Optional[bool] = False  # Adjust canvas size
 
+    #New scalinng functionality
+    doscale: Optional[bool] = False  # Enable scaling compensation (default: false)
+    sx: Optional[float] = None  # Manual scaling factor in x direction (optional)
+    sy: Optional[float] = None  # Manual scaling factor in y direction (optional)
+
 # Plot Registration Solution Schemas
 class PlotRegistrationRequest(BaseModel):
     folder_name: Optional[str] = None  # Folder name under /workspace/output
