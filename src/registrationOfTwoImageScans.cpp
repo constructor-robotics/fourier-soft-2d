@@ -17,6 +17,85 @@
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+
+// Structure to hold experiment data for logging
+struct ExperimentData {
+    std::string timestamp_utc;
+    std::string first_image_name;
+    std::string second_image_name;
+    int original_img1_width;
+    int original_img1_height;
+    int original_img2_width;
+    int original_img2_height;
+    int scaled_width;
+    int scaled_height;
+    bool debug_enabled;
+    std::string output_directory_relative;
+    double execution_time_seconds;
+    bool registration_successful;
+    int best_solution_index;
+};
+
+std::string getCurrentUTCTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    
+    std::stringstream ss;
+    ss << std::put_time(std::gmtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    ss << "." << std::setfill('0') << std::setw(3) << ms.count() << " UTC";
+    
+    return ss.str();
+}
+
+bool fileExists(const std::string& filePath) {
+    std::ifstream file(filePath);
+    return file.good();
+}
+
+void writeExperimentLog(const ExperimentData& data, const std::string& outputDir) {
+    std::string csvFilePath = outputDir + "/experiment_task_logs.csv";
+    bool fileExisted = fileExists(csvFilePath);
+    
+    std::ofstream csvFile;
+    csvFile.open(csvFilePath, std::ios::app); // Append mode
+    
+    if (!csvFile.is_open()) {
+        std::cerr << "Warning: Could not create/open experiment log file: " << csvFilePath << std::endl;
+        return;
+    }
+    
+    // Write header if file is new
+    if (!fileExisted) {
+        csvFile << "timestamp_utc,first_image_name,second_image_name,"
+                << "original_img1_width,original_img1_height,original_img2_width,original_img2_height,"
+                << "scaled_width,scaled_height,debug_enabled,output_directory_relative,"
+                << "execution_time_seconds,registration_successful,best_solution_index\n";
+    }
+    
+    // Write data row
+    csvFile << "\"" << data.timestamp_utc << "\","
+            << "\"" << data.first_image_name << "\","
+            << "\"" << data.second_image_name << "\","
+            << data.original_img1_width << ","
+            << data.original_img1_height << ","
+            << data.original_img2_width << ","
+            << data.original_img2_height << ","
+            << data.scaled_width << ","
+            << data.scaled_height << ","
+            << (data.debug_enabled ? "true" : "false") << ","
+            << "\"" << data.output_directory_relative << "\","
+            << std::fixed << std::setprecision(3) << data.execution_time_seconds << ","
+            << (data.registration_successful ? "true" : "false") << ","
+            << data.best_solution_index << "\n";
+    
+    csvFile.close();
+    
+    std::cout << "Experiment log written to: " << csvFilePath << std::endl;
+}
 
 void convertMatToDoubleArray(cv::Mat inputImg, double voxelData[]) {
     // takes input cv::Mat and convert it to double array
@@ -85,6 +164,15 @@ void printUsage(const std::string& programName) {
 }
 
 int main(int argc, char **argv) {
+    // Initialize experiment data structure
+    ExperimentData experimentData;
+    experimentData.timestamp_utc = getCurrentUTCTimestamp();
+    experimentData.registration_successful = false;
+    experimentData.best_solution_index = -1;
+    
+    // Start timing the execution
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
     // Default values
     std::string outputDirName = "";
     int dimensionScan = -1; // -1 means auto-detect
@@ -102,6 +190,10 @@ int main(int argc, char **argv) {
     // First two arguments are always the image paths (relative to /workspace/input)
     firstImageRelativePath = argv[1];
     secondImageRelativePath = argv[2];
+
+    // Store image names for logging
+    experimentData.first_image_name = firstImageRelativePath;
+    experimentData.second_image_name = secondImageRelativePath;
 
     // Parse optional arguments
     for (int i = 3; i < argc; i++) {
@@ -155,6 +247,9 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Store debug setting
+    experimentData.debug_enabled = debug;
+
     // Resolve full paths
     std::string firstImagePath = resolveInputPath(firstImageRelativePath);
     std::string secondImagePath = resolveInputPath(secondImageRelativePath);
@@ -192,6 +287,12 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Store original image dimensions
+    experimentData.original_img1_width = img1.cols;
+    experimentData.original_img1_height = img1.rows;
+    experimentData.original_img2_width = img2.cols;
+    experimentData.original_img2_height = img2.rows;
+
     std::cout << "Images loaded successfully!" << std::endl;
     std::cout << "  First image size:  " << img1.cols << "x" << img1.rows << std::endl;
     std::cout << "  Second image size: " << img2.cols << "x" << img2.rows << std::endl;
@@ -212,6 +313,10 @@ int main(int argc, char **argv) {
             std::cout << "Adjusted to closest power of 2: " << dimensionScan << std::endl;
     }
     }
+
+    // Store scaled dimensions
+    experimentData.scaled_width = dimensionScan;
+    experimentData.scaled_height = dimensionScan;
 
     // Resize images if necessary
     cv::Mat resizedImg1, resizedImg2;
@@ -242,6 +347,9 @@ int main(int argc, char **argv) {
     }
     
     std::string fullOutputDir = baseOutputDir + "/" + outputDirName;
+    
+    // Store relative output directory path for logging
+    experimentData.output_directory_relative = outputDirName;
     
     try {
         std::filesystem::create_directories(fullOutputDir);
@@ -278,28 +386,57 @@ int main(int argc, char **argv) {
 
     std::cout << "\nStarting registration process..." << std::endl;
 
-    // Perform registration
-    // use initial guess yes/no Currently set to no. Therefore, global registration is happening.
     int bestSolutionIndex = -1; // This will be set to the index of the best solution found
-    Eigen::Matrix4d estimatedTransformation = scanRegistrationObject.registrationOfTwoVoxelsSOFTFast(voxelData1,
-                                                                                                      voxelData2,
-                                                                                                      Eigen::Matrix4d::Identity(),
-                                                                                                      false, false,
-                                                                                                      1,
-                                                                                                      fullOutputDir,
-                                                                                                      bestSolutionIndex,
-                                                                                                     debug);
+    try {
+        // Perform registration
+        // use initial guess yes/no Currently set to no. Therefore, global registration is happening.
+        Eigen::Matrix4d estimatedTransformation = scanRegistrationObject.registrationOfTwoVoxelsSOFTFast(voxelData1,
+                                                                                                        voxelData2,
+                                                                                                        Eigen::Matrix4d::Identity(),
+                                                                                                        false, false,
+                                                                                                        1,
+                                                                                                        fullOutputDir,
+                                                                                                        bestSolutionIndex,
+                                                                                                        debug);
 
-    std::cout << "\nEstimated Transformation:" << std::endl;
-    std::cout << estimatedTransformation << std::endl;
+        std::cout << "\nEstimated Transformation:" << std::endl;
+        std::cout << estimatedTransformation << std::endl;
 
+        // Mark registration as successful
+        experimentData.registration_successful = true;
+        experimentData.best_solution_index = bestSolutionIndex;
+        
+        // Output JSON result as the very last line
+        std::cout << "{\"solution_index\":" << bestSolutionIndex << "}" << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cout << "Error during registration: " << e.what() << std::endl;
+        experimentData.registration_successful = false;
+    }
+
+    // Calculate execution time
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    experimentData.execution_time_seconds = duration.count() / 1000.0;
+
+    // Clean up memory
     free(voxelData1);
     free(voxelData2);
 
+    // Write experiment log
+    writeExperimentLog(experimentData, fullOutputDir);
+
+    if (experimentData.registration_successful) {
     std::cout << "Registration completed successfully!" << std::endl;
+    } else {
+        std::cout << "Registration failed!" << std::endl;
+    }
+    
     std::cout << "Results saved in: " << fullOutputDir << std::endl;
-     // Output JSON result as the very last line
+    std::cout << "Execution time: " << experimentData.execution_time_seconds << " seconds" << std::endl;
+
+    // Output JSON result as the very last line -- IMPORTANT: This must be the very last line of output
     std::cout << "{\"solution_index\":" << bestSolutionIndex << "}" << std::endl;
 
-    return 0;
+    return experimentData.registration_successful ? 0 : -1;
 }
