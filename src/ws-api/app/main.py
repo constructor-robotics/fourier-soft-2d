@@ -19,7 +19,8 @@ def read_root():
         "services": [
             "fourier-soft2d", 
             "image-stitching", 
-            "plot-registration"
+            "plot-registration",
+            "batch-fourier-soft2d"
         ]
     }
 

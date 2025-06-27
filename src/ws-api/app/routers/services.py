@@ -4,14 +4,18 @@ from app.schemas import (
     FourierSoft2DResponse, 
     FourierSoft2DRequest, 
     ImageStitchingRequest, 
-    PlotRegistrationRequest
+    PlotRegistrationRequest,
+    BatchFourierSoft2DRequest,
+    BatchFourierSoft2DResponse
 )
 from app.services.executor import WorkspaceServiceExecutor
+from app.services.batch_processor import BatchProcessor
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 executor = WorkspaceServiceExecutor()
+batch_processor = BatchProcessor()
 
 @router.post("/fourier-soft2d", response_model=FourierSoft2DResponse)
 async def run_fourier_soft2d(request: FourierSoft2DRequest):
@@ -82,6 +86,69 @@ async def run_image_stitching(request: ImageStitchingRequest):
         raise HTTPException(status_code=500, detail=result)
     
     return ServiceResponse(**result)
+
+@router.post("/batch-fourier-soft2d", response_model=BatchFourierSoft2DResponse)
+async def run_batch_fourier_soft2d(request: BatchFourierSoft2DRequest):
+    """
+    Execute batch fourier_soft2D processing for sequential numbered image pairs with CSV merging.
+    
+    **Process Overview:**
+    1. Detects numbered images matching the pattern (e.g., image_001.png, image_002.png)
+    2. Creates sequential pairs: (image_001.png, image_002.png), (image_002.png, image_003.png), etc.
+    3. Processes each pair through fourier_soft2D (debug=false, specified dimensions)
+    4. Adds unique UUID to each pair's CSV files for experiment tracking
+    5. Merges all registration_solutions_transformation.csv into batch_registration_solutions.csv
+    6. Merges all experiment_task_logs.csv into batch_experiment_task_logs.csv
+    7. Cleans up intermediate temporary directories
+    
+    **Output Structure:**
+    ```
+    /workspace/output/{output_dir}/
+    ├── batch_registration_solutions.csv      # Merged registration results with UUIDs
+    └── batch_experiment_task_logs.csv        # Merged experiment logs with UUIDs
+    ```
+    
+    **UUID Integration:**
+    - Each individual fourier_soft2D run gets a unique UUID
+    - UUID is added as first column in both CSV files
+    - Users can later join the two CSV files using the UUID column for detailed analysis
+    
+    **Example Request:**
+    ```json
+    {
+        "input_directory": "my_experiment",
+        "output_dir": "batch_experiment_1", 
+        "base_pattern": "image_",
+        "image_format": "png",
+        "dimensions": 512,
+        "start_index": 1,
+        "end_index": 10
+    }
+    ```
+    
+    **Parameters:**
+    - **input_directory**: Directory containing numbered images (relative to /workspace/input)
+    - **output_dir**: Output directory name (created under /workspace/output)
+    - **base_pattern**: Base name pattern (e.g., "image_", "frame_", "slice_")
+    - **image_format**: Image file extension without dot (e.g., "png", "jpg", "tiff")
+    - **dimensions**: Image dimensions for processing (REQUIRED - must be power of 2)
+    - **start_index**: [Optional] Starting image index (auto-detected if not provided)
+    - **end_index**: [Optional] Ending image index (auto-detected if not provided)
+    - **max_concurrent**: Maximum concurrent processes (default: 3)
+    
+    **Note:** All individual fourier_soft2D processes run with debug=false for batch efficiency.
+    """
+    logger.info(f"Starting batch Fourier Soft 2D processing")
+    logger.info(f"Input: {request.base_pattern}***.{request.image_format} in {request.input_directory}")
+    logger.info(f"Output: /workspace/output/{request.output_dir}")
+    logger.info(f"Dimensions: {request.dimensions}")
+    
+    result = await batch_processor.process_batch_fourier_soft2d(request)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result)
+    
+    return BatchFourierSoft2DResponse(**result)
 
 
 @router.get("/health")

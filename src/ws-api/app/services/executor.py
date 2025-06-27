@@ -16,6 +16,16 @@ class WorkspaceServiceExecutor:
         self.plot_registration = "/workspace/plotRegistrationSolution.py"
         self.workspace_input = "/workspace/input"
         self.workspace_output = "/workspace/output"
+
+        # Enhanced directory structure
+        self.workspace_output_individual = "/workspace/output/individual_runs"
+        self.workspace_output_batch = "/workspace/output/batch_runs"
+        self.workspace_output_stitching = "/workspace/output/stitching_results"
+        
+        # Ensure directories exist
+        Path(self.workspace_output_individual).mkdir(parents=True, exist_ok=True)
+        Path(self.workspace_output_batch).mkdir(parents=True, exist_ok=True)
+        Path(self.workspace_output_stitching).mkdir(parents=True, exist_ok=True)
     
     def _build_fourier_command(self, request) -> List[str]:
         """Build command for fourier_soft2D executable"""
@@ -189,3 +199,62 @@ class WorkspaceServiceExecutor:
         }
         
         return status
+    
+    def _generate_run_id(self, prefix="run"):
+        """Generate timestamped run ID"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{prefix}_{timestamp}"
+    
+    def _build_enhanced_fourier_command(self, request, run_context=None):
+        """Enhanced fourier command builder with proper output directory"""
+        cmd = [self.fourier_soft2d, request.image1_path, request.image2_path]
+        
+        if run_context:
+            # Batch processing - use structured directory
+            if run_context["type"] == "batch":
+                output_dir = f"{run_context['batch_id']}/{run_context['pair_id']}"
+                full_output_path = Path(self.workspace_output_batch) / output_dir
+            else:
+                # Individual processing
+                output_dir = run_context.get("run_id", self._generate_run_id())
+                full_output_path = Path(self.workspace_output_individual) / output_dir
+        else:
+            # Legacy individual processing
+            if request.output_dir:
+                output_dir = f"{request.output_dir}_{self._generate_run_id()}"
+            else:
+                output_dir = self._generate_run_id()
+            full_output_path = Path(self.workspace_output_individual) / output_dir
+        
+        # Ensure output directory exists
+        full_output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Pass relative path to C++ program
+        cmd.extend(["--output-dir", str(full_output_path.relative_to("/workspace/output"))])
+        
+        if request.dimensions:
+            cmd.extend(["--dimensions", str(request.dimensions)])
+        if request.debug:
+            cmd.extend(["--debug", "true"])
+        
+        return cmd, str(full_output_path)
+
+    def save_batch_metadata(self, batch_id, request_params, results):
+        """Save batch processing metadata"""
+        metadata = {
+            "batch_id": batch_id,
+            "created_at": datetime.now().isoformat(),
+            "request_parameters": request_params,
+            "processing_results": {
+                "total_pairs": len(results),
+                "successful_pairs": sum(1 for r in results if r.get("success", False)),
+                "failed_pairs": sum(1 for r in results if not r.get("success", False))
+            },
+            "pair_results": results
+        }
+        
+        metadata_file = Path(self.workspace_output_batch) / batch_id / "metadata.json"
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        return metadata_file
