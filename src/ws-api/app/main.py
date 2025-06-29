@@ -20,7 +20,8 @@ def read_root():
             "fourier-soft2d", 
             "image-stitching", 
             "plot-registration",
-            "batch-fourier-soft2d"
+            "batch-fourier-soft2d",
+            "batch-image-stitching"
         ]
     }
 

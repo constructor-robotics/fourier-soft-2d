@@ -30,7 +30,9 @@ class FourierSoft2DResponse(BaseModel):
 class ImageStitchingRequest(BaseModel):
     image1_path: str  # Path to first image relative to /workspace/input
     image2_path: str  # Path to second image relative to /workspace/input
+    override_inputdir: Optional[bool] = False # Flag to override relative path for inputs 
     csv_dir_path: Optional[str] = None  # Path to directory containing CSV file
+    subdir_output: Optional[str] = None  # Path to subdirectory with image results
     solution_index: Optional[int] = 0  # Solution index (default: 0)
     inverse: Optional[bool] = False  # Apply inverse transformation
     adjust_canvas: Optional[bool] = False  # Adjust canvas size
@@ -39,6 +41,15 @@ class ImageStitchingRequest(BaseModel):
     doscale: Optional[bool] = False  # Enable scaling compensation (default: false)
     sx: Optional[float] = None  # Manual scaling factor in x direction (optional)
     sy: Optional[float] = None  # Manual scaling factor in y direction (optional)
+    match_canvas: Optional[bool] = False  # Apply inverse transformation
+
+class ImageStitchingResponse(BaseModel):
+    success: bool
+    message: str
+    result_image_path: Optional[str] = None  # Full path to stitched result image
+    logs_output: Optional[str] = None
+    error: Optional[str] = None
+    execution_time: Optional[float] = None
 
 # Plot Registration Solution Schemas
 class PlotRegistrationRequest(BaseModel):
@@ -81,6 +92,38 @@ class BatchFourierSoft2DResponse(BaseModel):
     total_execution_time: float
     image_sequence_info: Optional[Dict[str, Any]] = None
     logs_output: Optional[str] = None
+
+class BatchImageStitchingRequest(BaseModel):
+    registration_solution_dir: str  # Directory containing batch CSV files from fourier processing
+    doscale: Optional[bool] = True  # Use original image sizes (true) or scaled sizes (false)
+    inverse: Optional[bool] = False  # Apply inverse transformation
+    debug: Optional[bool] = False  # Keep intermediate debug files
+
+class BatchStitchingResult(BaseModel):
+    pair_id: str
+    iteration: int  # Which iteration in the progressive stitching (1, 2, 3, ...)
+    image1_path: str  # Input image 1 (for first iteration) or previous stitched result
+    image2_path: str  # Input image 2 from CSV
+    output_path: str  # Path to stitched result
+    success: bool
+    message: str
+    execution_time: Optional[float] = None
+    error: Optional[str] = None
+    is_final_result: bool = False  # True for the last iteration
+
+class BatchImageStitchingResponse(BaseModel):
+    success: bool
+    message: str
+    total_iterations: int
+    successful_iterations: int
+    failed_iterations: int
+    registration_solution_dir: str
+    final_stitched_image: Optional[str] = None  # Path to final combined image
+    debug_folder: Optional[str] = None  # Path to debug folder (if debug=true)
+    scaling_factors: Dict[str, float]  # sx, sy values used
+    results: List[BatchStitchingResult]
+    total_execution_time: float
+    processing_info: Optional[Dict[str, Any]] = None
 
 ### --- HEALTH CHECK --- ###
 

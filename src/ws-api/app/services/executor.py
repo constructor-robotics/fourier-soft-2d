@@ -17,15 +17,15 @@ class WorkspaceServiceExecutor:
         self.workspace_input = "/workspace/input"
         self.workspace_output = "/workspace/output"
 
-        # Enhanced directory structure
-        self.workspace_output_individual = "/workspace/output/individual_runs"
-        self.workspace_output_batch = "/workspace/output/batch_runs"
-        self.workspace_output_stitching = "/workspace/output/stitching_results"
+        # # Enhanced directory structure
+        # self.workspace_output_individual = "/workspace/output/individual_runs"
+        # self.workspace_output_batch = "/workspace/output/batch_runs"
+        # self.workspace_output_stitching = "/workspace/output/stitching_results"
         
-        # Ensure directories exist
-        Path(self.workspace_output_individual).mkdir(parents=True, exist_ok=True)
-        Path(self.workspace_output_batch).mkdir(parents=True, exist_ok=True)
-        Path(self.workspace_output_stitching).mkdir(parents=True, exist_ok=True)
+        # # Ensure directories exist
+        # Path(self.workspace_output_individual).mkdir(parents=True, exist_ok=True)
+        # Path(self.workspace_output_batch).mkdir(parents=True, exist_ok=True)
+        # Path(self.workspace_output_stitching).mkdir(parents=True, exist_ok=True)
     
     def _build_fourier_command(self, request) -> List[str]:
         """Build command for fourier_soft2D executable"""
@@ -48,6 +48,8 @@ class WorkspaceServiceExecutor:
         
         if request.csv_dir_path:
             cmd.extend(["--csv_dir_path", request.csv_dir_path])
+        if request.subdir_output:
+            cmd.extend(["--subdir_output", request.subdir_output])
         if request.solution_index is not None:
             cmd.extend(["--solution_index", str(request.solution_index)])
         if request.inverse:
@@ -64,6 +66,12 @@ class WorkspaceServiceExecutor:
                 cmd.extend(["--sx", str(request.sx)])
             if request.sy is not None:
                 cmd.extend(["--sy", str(request.sy)])
+        
+        if request.match_canvas:
+            cmd.append("--match-canvas")
+        
+        if request.override_inputdir:
+            cmd.append("--override-inputdir")
         
         return cmd
     
@@ -97,6 +105,7 @@ class WorkspaceServiceExecutor:
             stderr_str = stderr.decode().strip()
             
             if process.returncode == 0:
+                logger.info(f"Receivig result from: {service_name}")
                 if service_name == "Fourier Soft 2D":
                     try:
                         # Get the last line and try to parse it as JSON
@@ -120,6 +129,31 @@ class WorkspaceServiceExecutor:
                             "logs_output": stdout_str if stdout_str else None,
                             "execution_time": execution_time
                         }
+                elif service_name == "Image Stitching":
+                    try:
+                        # Get the last line and try to parse it as JSON
+                        lines = stdout_str.strip().split('\n')
+                        last_line = lines[-1] if lines else ""
+                        result = json.loads(last_line)
+                        stitched_image_path = result["stitched_image_path"]
+
+                        return {
+                                "success": True,
+                                "message": f"{service_name} executed successfully",
+                                "result_image_path": stitched_image_path,
+                                "logs_output": stdout_str if stdout_str else None,
+                                "execution_time": execution_time
+                            }
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        logger.info(f"Executing {service_name}: {' '.join(cmd)}")
+                        return {
+                                "success": False,
+                                "message": f"{service_name} executed successfully",
+                                "result_image_path": None,
+                                "logs_output": stdout_str if stdout_str else None,
+                                "execution_time": execution_time
+                            }
+
                 else:
                     return {
                         "success": True,
@@ -205,39 +239,39 @@ class WorkspaceServiceExecutor:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"{prefix}_{timestamp}"
     
-    def _build_enhanced_fourier_command(self, request, run_context=None):
-        """Enhanced fourier command builder with proper output directory"""
-        cmd = [self.fourier_soft2d, request.image1_path, request.image2_path]
+    # def _build_enhanced_fourier_command(self, request, run_context=None):
+    #     """Enhanced fourier command builder with proper output directory"""
+    #     cmd = [self.fourier_soft2d, request.image1_path, request.image2_path]
         
-        if run_context:
-            # Batch processing - use structured directory
-            if run_context["type"] == "batch":
-                output_dir = f"{run_context['batch_id']}/{run_context['pair_id']}"
-                full_output_path = Path(self.workspace_output_batch) / output_dir
-            else:
-                # Individual processing
-                output_dir = run_context.get("run_id", self._generate_run_id())
-                full_output_path = Path(self.workspace_output_individual) / output_dir
-        else:
-            # Legacy individual processing
-            if request.output_dir:
-                output_dir = f"{request.output_dir}_{self._generate_run_id()}"
-            else:
-                output_dir = self._generate_run_id()
-            full_output_path = Path(self.workspace_output_individual) / output_dir
+    #     if run_context:
+    #         # Batch processing - use structured directory
+    #         if run_context["type"] == "batch":
+    #             output_dir = f"{run_context['batch_id']}/{run_context['pair_id']}"
+    #             full_output_path = Path(self.workspace_output_batch) / output_dir
+    #         else:
+    #             # Individual processing
+    #             output_dir = run_context.get("run_id", self._generate_run_id())
+    #             full_output_path = Path(self.workspace_output_individual) / output_dir
+    #     else:
+    #         # Legacy individual processing
+    #         if request.output_dir:
+    #             output_dir = f"{request.output_dir}_{self._generate_run_id()}"
+    #         else:
+    #             output_dir = self._generate_run_id()
+    #         full_output_path = Path(self.workspace_output_individual) / output_dir
         
-        # Ensure output directory exists
-        full_output_path.mkdir(parents=True, exist_ok=True)
+    #     # Ensure output directory exists
+    #     full_output_path.mkdir(parents=True, exist_ok=True)
         
-        # Pass relative path to C++ program
-        cmd.extend(["--output-dir", str(full_output_path.relative_to("/workspace/output"))])
+    #     # Pass relative path to C++ program
+    #     cmd.extend(["--output-dir", str(full_output_path.relative_to("/workspace/output"))])
         
-        if request.dimensions:
-            cmd.extend(["--dimensions", str(request.dimensions)])
-        if request.debug:
-            cmd.extend(["--debug", "true"])
+    #     if request.dimensions:
+    #         cmd.extend(["--dimensions", str(request.dimensions)])
+    #     if request.debug:
+    #         cmd.extend(["--debug", "true"])
         
-        return cmd, str(full_output_path)
+    #     return cmd, str(full_output_path)
 
     def save_batch_metadata(self, batch_id, request_params, results):
         """Save batch processing metadata"""

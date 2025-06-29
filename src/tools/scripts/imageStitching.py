@@ -5,20 +5,23 @@ Enhanced Image Stitching Script with Scaling Support
 New features:
 - --doscale flag to enable scaling compensation
 - --sx and --sy flags for manual scaling factors
+- --match-canvas flag for handling pre-stitched images with larger canvas
 - Automatic scaling factor extraction from experiment_task_logs.csv
 - Scaling matrix application to transformation matrix
+- Canvas matching and re-centering for reference image
 
 Steps:
 1. Load image 1 and image 2 from user input
-2. Read transformation matrix from CSV file
-3. [NEW] If --doscale is true, apply scaling compensation to transformation matrix
-4. From transformation matrix:
+2. If --match-canvas is true, resize reference image canvas to match transform image canvas
+3. Read transformation matrix from CSV file
+4. If --doscale is true, apply scaling compensation to transformation matrix
+5. From transformation matrix:
    a. Extract rotation matrix and calculate angle
    b. Rotate image using cv2.warpAffine()
    c. Create translational affine_matrix from CSV values
    d. Apply translation to rotated image
    e. Result = transformed_image
-5. Blend transformed_image with reference image (with and without colormaps)
+6. Blend transformed_image with reference image (with and without colormaps)
 """
 
 import numpy as np
@@ -26,6 +29,7 @@ import cv2
 import pandas as pd
 import argparse
 from pathlib import Path
+import json
 
 def find_latest_output_directory(base_dir="/workspace/output"):
     """
@@ -345,9 +349,61 @@ def step1_load_images(img1_path, img2_path):
     
     return img1, img2
 
-def step2_read_and_process_transformation_matrix(csv_path, solution_index=0, inverse=False):
+def step2_match_canvas_sizes(img_to_transform, reference_img, match_canvas, inverse):
     """
-    Step 2: Read transformation matrix from CSV file and optionally compute inverse
+    Step 2: Match canvas sizes if requested (NEW FEATURE)
+    
+    When match_canvas=True, resize the reference image canvas to match the transform image canvas
+    and re-center the reference image content.
+    
+    Args:
+        img_to_transform (np.ndarray): Image that will be transformed
+        reference_img (np.ndarray): Reference image that may need canvas adjustment
+        match_canvas (bool): Whether to match canvas sizes
+        inverse (bool): Whether inverse transformation is being used
+        
+    Returns:
+        tuple: (img_to_transform, reference_img_adjusted)
+    """
+    if not match_canvas:
+        print("\n=== STEP 2: Canvas matching disabled ===")
+        return img_to_transform, reference_img
+    
+    print("\n=== STEP 2: Matching Canvas Sizes ===")
+    
+    transform_h, transform_w = img_to_transform.shape[:2]
+    reference_h, reference_w = reference_img.shape[:2]
+    
+    print(f"Transform image size: {transform_w}x{transform_h}")
+    print(f"Reference image size: {reference_w}x{reference_h}")
+    
+    if (transform_h, transform_w) == (reference_h, reference_w):
+        print("Images already have the same canvas size - no adjustment needed")
+        return img_to_transform, reference_img
+    
+    # Determine which image needs canvas adjustment
+    if inverse:
+        print("INVERSE MODE: Reference image (img1) has larger canvas, adjusting transform image (img2) canvas")
+        # In inverse mode, img1 is reference and img2 is being transformed
+        # If img1 has larger canvas, we need to expand img2's canvas to match
+        adjusted_transform_img = expand_image_to_canvas(img_to_transform, transform_w, transform_h)
+        adjusted_reference_img = reference_img  # Reference already has the right size
+        print(f"Expanded transform image canvas from {img_to_transform.shape} to {adjusted_transform_img.shape}")
+    else:
+        print("NORMAL MODE: Transform image (img1) has larger canvas, adjusting reference image (img2) canvas")
+        # In normal mode, img1 is being transformed and img2 is reference
+        # If img1 has larger canvas, we need to expand img2's canvas to match
+        adjusted_reference_img = expand_image_to_canvas(reference_img, transform_w, transform_h)
+        adjusted_transform_img = img_to_transform  # Transform image already has the right size
+        print(f"Expanded reference image canvas from {reference_img.shape} to {adjusted_reference_img.shape}")
+    
+    print("Canvas sizes now match - both images ready for registration")
+    
+    return adjusted_transform_img, adjusted_reference_img
+
+def step3_read_and_process_transformation_matrix(csv_path, solution_index=0, inverse=False):
+    """
+    Step 3: Read transformation matrix from CSV file and optionally compute inverse
     
     Args:
         csv_path (str): Path to CSV file
@@ -357,7 +413,7 @@ def step2_read_and_process_transformation_matrix(csv_path, solution_index=0, inv
     Returns:
         np.ndarray: 4x4 transformation matrix (original or inverse)
     """
-    print("\n=== STEP 2: Reading Transformation Matrix ===")
+    print("\n=== STEP 3: Reading Transformation Matrix ===")
     
     df = pd.read_csv(csv_path)
     print(f"Found {len(df)} solutions in CSV")
@@ -392,9 +448,9 @@ def step2_read_and_process_transformation_matrix(csv_path, solution_index=0, inv
     else:
         return transformation_matrix
 
-def step3_apply_scaling_compensation(transformation_matrix, output_dir, do_scale, sx=None, sy=None, source_width=None, source_height=None):
+def step4_apply_scaling_compensation(transformation_matrix, output_dir, do_scale, sx=None, sy=None, source_width=None, source_height=None):
     """
-    Step 3: Apply scaling compensation to transformation matrix if enabled
+    Step 4: Apply scaling compensation to transformation matrix if enabled
     
     Args:
         transformation_matrix (np.ndarray): Original transformation matrix
@@ -407,10 +463,10 @@ def step3_apply_scaling_compensation(transformation_matrix, output_dir, do_scale
         np.ndarray: Transformation matrix (scaled if do_scale=True, original otherwise)
     """
     if not do_scale:
-        print("\n=== STEP 3: Scaling compensation disabled ===")
+        print("\n=== STEP 4: Scaling compensation disabled ===")
         return transformation_matrix
     
-    print("\n=== STEP 3: Applying Scaling Compensation ===")
+    print("\n=== STEP 4: Applying Scaling Compensation ===")
     
     # Extract scaling factors
     sx_final, sy_final = extract_scaling_factors_from_logs(output_dir, sx, sy, source_width, source_height)
@@ -422,9 +478,9 @@ def step3_apply_scaling_compensation(transformation_matrix, output_dir, do_scale
     
     return scaled_transformation_matrix
 
-def step4a_extract_rotation_angle(transformation_matrix):
+def step5a_extract_rotation_angle(transformation_matrix):
     """
-    Step 4a: Extract rotation matrix and calculate estimated angle
+    Step 5a: Extract rotation matrix and calculate estimated angle
     
     Args:
         transformation_matrix (np.ndarray): 4x4 transformation matrix
@@ -432,7 +488,7 @@ def step4a_extract_rotation_angle(transformation_matrix):
     Returns:
         float: Rotation angle in degrees
     """
-    print("\n=== STEP 4a: Extract Rotation Angle ===")
+    print("\n=== STEP 5a: Extract Rotation Angle ===")
     
     # Extract rotation angle from transformation matrix
     rotation_angle_rad = np.arctan2(transformation_matrix[1, 0], transformation_matrix[0, 0])
@@ -442,9 +498,9 @@ def step4a_extract_rotation_angle(transformation_matrix):
     
     return rotation_angle_deg
 
-def step4b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name="image"):
+def step5b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name="image"):
     """
-    Step 4b: Rotate image using cv2.warpAffine()
+    Step 5b: Rotate image using cv2.warpAffine()
     
     Args:
         img (np.ndarray): Image to rotate
@@ -455,7 +511,7 @@ def step4b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name
     Returns:
         np.ndarray: Rotated image
     """
-    print(f"\n=== STEP 4b: Rotating {image_name} ===")
+    print(f"\n=== STEP 5b: Rotating {image_name} ===")
     
     height, width = img.shape[:2]
     center = (width / 2, height / 2)
@@ -501,9 +557,9 @@ def step4b_rotate_image(img, rotation_angle_deg, adjust_canvas=False, image_name
     
     return rotated_img
 
-def step4c_create_translation_matrix(transformation_matrix):
+def step5c_create_translation_matrix(transformation_matrix):
     """
-    Step 4c: Create translational affine_matrix from CSV values
+    Step 5c: Create translational affine_matrix from CSV values
     
     Args:
         transformation_matrix (np.ndarray): 4x4 transformation matrix
@@ -511,7 +567,7 @@ def step4c_create_translation_matrix(transformation_matrix):
     Returns:
         np.ndarray: 2x3 translation matrix
     """
-    print("\n=== STEP 4c: Creating Translation Matrix ===")
+    print("\n=== STEP 5c: Creating Translation Matrix ===")
     
     # Extract translation values
     tx = transformation_matrix[0, 3]
@@ -530,9 +586,9 @@ def step4c_create_translation_matrix(transformation_matrix):
     
     return translation_matrix
 
-def step4d_apply_translation(rotated_img, translation_matrix, adjust_canvas=False, image_name="image"):
+def step5d_apply_translation(rotated_img, translation_matrix, adjust_canvas=False, image_name="image"):
     """
-    Step 4d: Apply translation to rotated image
+    Step 5d: Apply translation to rotated image
     
     Args:
         rotated_img (np.ndarray): Rotated image
@@ -543,7 +599,7 @@ def step4d_apply_translation(rotated_img, translation_matrix, adjust_canvas=Fals
     Returns:
         np.ndarray: Transformed image (rotated + translated)
     """
-    print(f"\n=== STEP 4d: Applying Translation to {image_name} ===")
+    print(f"\n=== STEP 5d: Applying Translation to {image_name} ===")
     
     height, width = rotated_img.shape[:2]
     
@@ -586,9 +642,9 @@ def step4d_apply_translation(rotated_img, translation_matrix, adjust_canvas=Fals
     
     return transformed_image
 
-def step5_blend_images(transformed_image, reference_image, adjust_canvas=False, transform_name="img1", reference_name="img2"):
+def step6_blend_images(transformed_image, reference_image, adjust_canvas=False, transform_name="img1", reference_name="img2"):
     """
-    Step 5: Blend transformed_image with reference_image
+    Step 6: Blend transformed_image with reference_image
     Creates two versions: one with colormaps, one with original images
     
     Args:
@@ -601,7 +657,7 @@ def step5_blend_images(transformed_image, reference_image, adjust_canvas=False, 
     Returns:
         tuple: (original_blend, colormap_blend)
     """
-    print(f"\n=== STEP 5: Blending {transform_name} (transformed) with {reference_name} (reference) ===")
+    print(f"\n=== STEP 6: Blending {transform_name} (transformed) with {reference_name} (reference) ===")
     
     # Get sizes
     h1, w1 = transformed_image.shape[:2]
@@ -700,7 +756,10 @@ def main():
     parser = argparse.ArgumentParser(description='Enhanced image stitching with scaling support')
     parser.add_argument('image1_path', help='Path to first image relative to /workspace/input')
     parser.add_argument('image2_path', help='Path to second image relative to /workspace/input')
+    parser.add_argument('--override-inputdir', action='store_true',
+                       help='Override search in /input and follow full-path of images (default: False)')
     parser.add_argument('--csv_dir_path', help='Path to directory containing CSV file')
+    parser.add_argument('--subdir_output', help='Subdirectory to save image results')
     parser.add_argument('--solution_index', type=int, nargs='?', default=0, 
                        help='Solution index (default: 0)')
     parser.add_argument('--inverse', action='store_true',
@@ -716,32 +775,53 @@ def main():
     parser.add_argument('--sy', type=float,
                        help='Manual scaling factor in y direction (optional)')
     
+    # Canvas matching argument
+    parser.add_argument('--match-canvas', action='store_true',
+                       help='Match canvas sizes when transform image has larger canvas (e.g., pre-stitched) (default: False)')
+    
     args = parser.parse_args()
+    
+    # NEW: Validation check for --match-canvas and scaling parameters
+    if args.match_canvas and args.doscale:
+        if args.sx is None or args.sy is None:
+            print("ERROR: When --match-canvas is enabled with --doscale, both --sx and --sy must be explicitly provided.")
+            print("Reason: Canvas adjustment doesn't mean the image was scaled, so automatic scaling factor")
+            print("calculation from experiment logs may be incorrect. Please provide manual scaling factors.")
+            print("Example: --sx 1.0 --sy 1.0 (if no scaling) or appropriate values for your case.")
+            return 1
     
     # Setup paths
     input_dir = Path('/workspace/input')
     output_dir = Path('/workspace/output')
-    img1_path = input_dir / args.image1_path
-    img2_path = input_dir / args.image2_path
+    img1_path = input_dir / args.image1_path if (args.override_inputdir is False) else Path(args.image1_path)
+    img2_path = input_dir / args.image2_path if (args.override_inputdir is False) else Path(args.image2_path)
     
     # Determine CSV file path based on user input
     csv_path = determine_csv_path(args.csv_dir_path)
     output_dir = csv_path.parent  # Output in same directory as CSV file
+
+    # Check if the subdirectory for the images files exists, otherwise create it
+    if args.subdir_output is not None:
+        subdir_output_path = output_dir / args.subdir_output
+        subdir_output_path.mkdir(parents=True, exist_ok=True)
     
     print("=== ENHANCED IMAGE STITCHING WITH SCALING SUPPORT ===")
     print(f"Image 1: {args.image1_path}")
     print(f"Image 2: {args.image2_path}")
     print(f"CSV file: {csv_path}")
     print(f"Output dir: {output_dir}")
+    print(f"Image subdirectory: {args.subdir_output}")
     print(f"Solution: {args.solution_index}")
     print(f"Inverse: {args.inverse}")
     print(f"Adjust canvas: {args.adjust_canvas}")
+    print(f"Match canvas: {args.match_canvas}") 
     print(f"Scaling enabled: {args.doscale}")
+    
     if args.doscale:
         if args.sx is not None and args.sy is not None:
             print(f"Manual scaling: sx={args.sx}, sy={args.sy}")
         else:
-            print("Scaling: Will read from experiment_task_logs.csv")
+            print("Scaling: Will calculated based on current image size and experiment_task_logs.csv")
     print()
     
     # Validate paths
@@ -762,15 +842,7 @@ def main():
         
         # STEP 1: Load images
         img1, img2 = step1_load_images(img1_path, img2_path)
-        
-        # STEP 2: Read transformation matrix from CSV
-        transformation_matrix = step2_read_and_process_transformation_matrix(csv_path, args.solution_index, args.inverse)
-        
-        # STEP 3: Apply scaling compensation if enabled (NEW FEATURE)
-        transformation_matrix = step3_apply_scaling_compensation(
-            transformation_matrix, output_dir, args.doscale, args.sx, args.sy, img1.shape[1], img1.shape[0]
-        )
-        
+
         # Determine which image to transform based on inverse flag
         if args.inverse:
             # Transform img2 to align with img1
@@ -787,36 +859,66 @@ def main():
             reference_name = "img2"
             print(f"\nNORMAL MODE: Transforming {transform_name} to align with {reference_name}")
         
-        # STEP 4a: Extract rotation angle from transformation matrix
-        rotation_angle_deg = step4a_extract_rotation_angle(transformation_matrix)
+        # STEP 2: Match canvas sizes if requested (NEW FEATURE)
+        img_to_transform, reference_img = step2_match_canvas_sizes(
+            img_to_transform, reference_img, args.match_canvas, args.inverse
+        )
         
-        # STEP 4b: Rotate the selected image
-        rotated_img = step4b_rotate_image(img_to_transform, rotation_angle_deg, args.adjust_canvas, transform_name)
+        # STEP 3: Read transformation matrix from CSV
+        transformation_matrix = step3_read_and_process_transformation_matrix(csv_path, args.solution_index, args.inverse)
         
-        # STEP 4c: Create translation matrix from transformation matrix
-        translation_matrix = step4c_create_translation_matrix(transformation_matrix)
+        # STEP 4: Apply scaling compensation if enabled
+        transformation_matrix = step4_apply_scaling_compensation(
+            transformation_matrix, output_dir, args.doscale, args.sx, args.sy, 
+            img_to_transform.shape[1], img_to_transform.shape[0]  # Use transform image dimensions for scaling
+        )
         
-        # STEP 4d: Apply translation to the rotated image
-        transformed_image = step4d_apply_translation(rotated_img, translation_matrix, args.adjust_canvas, transform_name)
+        # STEP 5a: Extract rotation angle from transformation matrix
+        rotation_angle_deg = step5a_extract_rotation_angle(transformation_matrix)
         
-        # STEP 5: Blend the transformed image with the reference image
-        original_blend, colormap_blend = step5_blend_images(transformed_image, reference_img, args.adjust_canvas, transform_name, reference_name)
+        # STEP 5b: Rotate the selected image
+        rotated_img = step5b_rotate_image(img_to_transform, rotation_angle_deg, args.adjust_canvas, transform_name)
+        
+        # STEP 5c: Create translation matrix from transformation matrix
+        translation_matrix = step5c_create_translation_matrix(transformation_matrix)
+        
+        # STEP 5d: Apply translation to the rotated image
+        transformed_image = step5d_apply_translation(rotated_img, translation_matrix, args.adjust_canvas, transform_name)
+        
+        # STEP 6: Blend the transformed image with the reference image
+        original_blend, colormap_blend = step6_blend_images(transformed_image, reference_img, args.adjust_canvas, transform_name, reference_name)
         
         # ========================================
         # SAVE ALL RESULTS
         # ========================================
         print("\n=== SAVING RESULTS ===")
         
-        # Add scaling info to filename if scaling was applied
+        # Build filename suffix based on enabled features
+        suffix_parts = []
+        
+        if args.match_canvas:
+            suffix_parts.append("canvas_matched")
+        
         if args.doscale:
-            sx_final, sy_final = extract_scaling_factors_from_logs(output_dir, args.sx, args.sy, img1.shape[1], img1.shape[0])
-            scaling_suffix = f"_scaled_{sx_final:.3f}x{sy_final:.3f}"
-        else:
-            scaling_suffix = ""
+            sx_final, sy_final = extract_scaling_factors_from_logs(output_dir, args.sx, args.sy, img_to_transform.shape[1], img_to_transform.shape[0])
+            suffix_parts.append(f"scaled_{sx_final:.3f}x{sy_final:.3f}")
+        
+        if args.inverse:
+            suffix_parts.append("inverse")
+        
+        if args.adjust_canvas:
+            suffix_parts.append("adjusted_canvas")
+        
+        # Create filename suffix
+        suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
         
         # Save blended images
-        original_path = output_dir / f"stitched_originals_blend{scaling_suffix}.png"
-        colormap_path = output_dir / f"stitched_colormaps_blend{scaling_suffix}.png"
+        if args.subdir_output is None:
+            original_path = output_dir / f"stitched_originals_blend{suffix}.png"
+            colormap_path = output_dir / f"stitched_colormaps_blend{suffix}.png"
+        else:
+            original_path = output_dir / args.subdir_output / f"stitched_originals_blend{suffix}.png"
+            colormap_path = output_dir / args.subdir_output / f"stitched_colormaps_blend{suffix}.png"
         
         cv2.imwrite(str(original_path), original_blend)
         cv2.imwrite(str(colormap_path), colormap_blend)
@@ -824,12 +926,46 @@ def main():
         print(f"Original blend saved: {original_path}")
         print(f"Colormap blend saved: {colormap_path}")
         
+        # Save intermediate results for debugging if canvas matching was used
+        if args.match_canvas:
+            if args.subdir_output is None:
+                transform_path = output_dir / f"debug_transform_image{suffix}.png"
+                reference_path = output_dir / f"debug_reference_image{suffix}.png"
+                transformed_path = output_dir / f"debug_transformed_result{suffix}.png"
+            else:
+                transform_path = output_dir / args.subdir_output / f"debug_transform_image{suffix}.png"
+                reference_path = output_dir / args.subdir_output / f"debug_reference_image{suffix}.png"
+                transformed_path = output_dir / args.subdir_output / f"debug_transformed_result{suffix}.png"
+            
+            cv2.imwrite(str(transform_path), img_to_transform)
+            cv2.imwrite(str(reference_path), reference_img)
+            cv2.imwrite(str(transformed_path), transformed_image)
+            
+            print(f"Debug - Transform image saved: {transform_path}")
+            print(f"Debug - Reference image saved: {reference_path}")
+            print(f"Debug - Transformed result saved: {transformed_path}")
+        
         print("\n=== PROCESS COMPLETE ===")
         print("All steps executed successfully!")
+        
+        # Print summary of what was done
+        print(f"\nSUMMARY:")
+        print(f"- Loaded images: {args.image1_path}, {args.image2_path}")
+        print(f"- Transform mode: {'INVERSE' if args.inverse else 'NORMAL'}")
+        print(f"- Canvas matching: {'ENABLED' if args.match_canvas else 'DISABLED'}")
+        print(f"- Scaling compensation: {'ENABLED' if args.doscale else 'DISABLED'}")
+        print(f"- Canvas adjustment: {'ENABLED' if args.adjust_canvas else 'DISABLED'}")
+        print(f"- Final canvas size: {transformed_image.shape}")
+        
+        stitched_image_path = str(original_path)
+        data = {"stitched_image_path": stitched_image_path}
+        print(json.dumps(data))
         return 0
     
     except Exception as e:
         print(f"ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return 1
 
 if __name__ == "__main__":
