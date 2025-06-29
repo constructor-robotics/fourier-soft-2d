@@ -103,14 +103,6 @@ RUN apt-get update && apt-get install -y \
     qtbase5-dev \
     libqt5opengl5-dev
 
-# Python packages for API development
-# RUN python3 -m pip install -timeout=60 --retries=3 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
-#     fastapi==0.104.1 \
-#     "uvicorn[standard]==0.24.0" \
-#     python-multipart==0.0.6 \
-#     pydantic-settings==2.1.0
-
-
 # Copy requirements file and install all Python packages
 COPY requirements.txt /tmp/requirements.txt
 RUN echo "=== Installing Python packages from requirements.txt ===" && \
@@ -121,10 +113,6 @@ RUN echo "=== Installing Python packages from requirements.txt ===" && \
     python3 -c "import sys; print('\n'.join(sys.path))" && \
     echo "=== Testing imports immediately after installation ===" && \
     rm /tmp/requirements.txt
-
-# # Alternative installation method if requirements.txt fails
-# RUN echo "=== Backup installation method ===" && \
-#     /usr/bin/python3 -m pip install --user fastapi==0.104.1 uvicorn[standard]==0.24.0 || true
 
 # Additional useful tools
 RUN apt-get update && apt-get install -y \
@@ -172,10 +160,6 @@ RUN echo "=== Verifying library installations ===" && \
 # Copy source code from host src/ directory to container
 COPY --chown=tester:tester ./src /workspace/src
 
-# Set up environment variables for development
-# ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
-# ENV LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
-
 # Switch to tester user for compilation
 USER tester
 
@@ -210,33 +194,13 @@ RUN mkdir -p /workspace/input && \
 RUN echo "=== Final verification - build directory and symbolic links ===" && \
     ls -la /workspace/src/build/ 2>/dev/null || echo "Build directory missing!"
 
-# RUN echo "=== Checking symbolic links in /workspace ===" && \
-#     ls -la /workspace/ | grep -E "(fourier_soft2D|imageStitching|plotRegistrationSolution)" || echo "Symbolic links missing!"
-
-# Set default command that shows available programs and starts FastAPI
-# CMD echo "=== Available Programs in /workspace ===" && \
-#     echo "C++ Executable:" && \
-#     ls -la /workspace/fourier_soft2D 2>/dev/null || echo "  fourier_soft2D - NOT FOUND" && \
-#     echo "Python Scripts:" && \
-#     ls -la /workspace/imageStitching.py 2>/dev/null || echo "  imageStitching.py - NOT FOUND" && \
-#     ls -la /workspace/plotRegistrationSolution.py 2>/dev/null || echo "  plotRegistrationSolution.py - NOT FOUND" && \
-#     echo "=== Setting up permissions for mounted volumes ===" && \
-#     mkdir -p /workspace/input /workspace/output /workspace/datasets && \
-#     chown -R tester:tester /workspace/input /workspace/output /workspace/datasets 2>/dev/null || true && \
-#     chmod -R 755 /workspace/input /workspace/output /workspace/datasets 2>/dev/null || true && \
-#     echo "=== Starting FastAPI application ===" && \
-#     cd /workspace && \
-#     uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
-
 # Add health check to verify FastAPI is running -- This is not necessary if docker compose is used
 # HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 #     CMD curl -f http://localhost:8080/health || exit 1
 
 # Set default command to start FastAPI application
-#WORKDIR /workspace/src/ws-api
 CMD cd /workspace/src/ws-api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
-#CMD uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
-#CMD ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8080"]
+
 
 # Labels for documentation
 LABEL maintainer="Arturo Gomez-Chavez <agomezchav@constructor.university>"
