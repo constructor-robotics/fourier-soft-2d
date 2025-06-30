@@ -1,4 +1,16 @@
 """
+File: utils.py
+Description: Utility functions for sequential batch processing operations
+Author: Arturo Gomez-Chavez
+Creation Date: 30.06.2025
+Institution/Organization: Constructor University GmbH
+Contributors/Editors:
+License: MIT License - See LICENSE.MD file for details
+Contact & Support:
+- Email: [support@example.com]
+"""
+
+"""
 Utility functions for sequential batch processing operations
 """
 

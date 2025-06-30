@@ -1,4 +1,16 @@
 """
+File: batch_stitching_processor.py
+Description: Batch image stitching processor for progressive image combination
+Author: Arturo Gomez-Chavez
+Creation Date: 30.06.2025
+Institution/Organization: Constructor University GmbH
+Contributors/Editors:
+License: MIT License - See LICENSE.MD file for details
+Contact & Support:
+- Email: [support@example.com]
+"""
+
+"""
 Batch image stitching processor for progressive image combination
 """
 

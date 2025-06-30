@@ -1,6 +1,18 @@
-//
-// Created by tim-linux on 01.03.22.
-//
+/*
+File: softCorrelationClass.h
+Description: [Brief description of the file's purpose]
+
+Author: Tim Hansen
+Creation Date: 01.03.2022
+Institution/Organization: Constructor University GmbH
+
+Contributors/Editors:
+
+License: MIT License - See LICENSE.MD file for details
+
+Contact & Support:
+- Email: [support@example.com]
+*/
 
 #ifndef UNDERWATERSLAM_SOFTCORRELATIONCLASS_H
 #define UNDERWATERSLAM_SOFTCORRELATIONCLASS_H

@@ -1,3 +1,15 @@
+"""
+File: services.py
+Description: FastAPI service endpoints for image registration and batch processing
+Author: Arturo Gomez-Chavez
+Creation Date: 30.06.2025
+Institution/Organization: Constructor University GmbH
+Contributors/Editors:
+License: MIT License - See LICENSE.MD file for details
+Contact & Support:
+- Email: [support@example.com]
+"""
+
 from fastapi import APIRouter, HTTPException
 from app.schemas import (
     ServiceResponse,

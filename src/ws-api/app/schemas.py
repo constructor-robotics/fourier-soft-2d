@@ -1,3 +1,15 @@
+"""
+File: schemas.py
+Description: Pydantic models and data schemas for API requests and responses
+Author: Arturo Gomez-Chavez
+Creation Date: 30.06.2025
+Institution/Organization: Constructor University GmbH
+Contributors/Editors:
+License: MIT License - See LICENSE.MD file for details
+Contact & Support:
+- Email: [support@example.com]
+"""
+
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from enum import Enum

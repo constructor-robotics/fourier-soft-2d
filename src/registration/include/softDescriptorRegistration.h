@@ -1,6 +1,19 @@
-//
-// Created by tim-linux on 01.03.22.
-//
+/*
+File: softDescriptorRegistration.h
+Description: [Brief description of the file's purpose]
+
+Author: Tim Hansen
+Creation Date: 01.03.2022
+Institution/Organization: Constructor University GmbH
+
+Contributors/Editors:
+- Arturo Gomez-Chavez (30.06.2025): [Description of changes]
+
+License: MIT License - See LICENSE.MD file for details
+
+Contact & Support:
+- Email: [support@example.com]
+*/
 
 #ifndef UNDERWATERSLAM_SOFTDESCRIPTORREGISTRATION_H
 #define UNDERWATERSLAM_SOFTDESCRIPTORREGISTRATION_H
