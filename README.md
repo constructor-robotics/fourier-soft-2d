@@ -1,6 +1,11 @@
-# Fourier-SOFT-2D Registration
-Implementation of Fourier-SOFT-2D registration, with intermediate steps of the registration process.
+# Fourier-SOFT in 2D (FS2D) Registration
+Implementation of Fourier-SOFT in 2D (FS2D) registration, with intermediate steps of the registration process.
 This project provides tools for aligning and stitching images using advanced frequency domain techniques, including batch processing capabilities for sequential image sequences.
+
+## Related Publications
+If you use this algorithm in your work or as part of your research, please cite the following papers:
+* H. Bülow and A. Birk, "Scale-Free Registrations in 3D: 7 Degrees of Freedom with Fourier-Mellin-SOFT transforms," International Journal of Computer Vision (IJCV), vol. 126, pp. 731-750, 2018. [https://doi.org/10.1007/s11263-018-1067-5](https://doi.org/10.1007/s11263-018-1067-5). 2018  (open access)
+* T. Hansen and A. Birk, "Using Registration with Fourier-SOFT in 2D (FS2D) for Robust Scan Matching of Sonar Range Data," in IEEE International Conference on Robotics and Automation (ICRA), 2023. [https://doi.org/10.1109/ICRA48891.2023.10160519](https://doi.org/10.1109/ICRA48891.2023.10160519 ). See also the paper on [Researchgate](https://www.researchgate.net/publication/372130798_Using_Registration_with_Fourier-SOFT_in_2D_FS2D_for_Robust_Scan_Matching_of_Sonar_Range_Data)
 
 ## Installation
 
