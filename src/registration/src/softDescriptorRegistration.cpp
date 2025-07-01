@@ -1,6 +1,19 @@
-//
-// Created by tim-external on 01.03.22.
-//
+/*
+File: [FILENAME]
+Description: [Brief description of the file's purpose]
+
+Author: Tim Hansen
+Creation Date: 01.03.2022
+Institution/Organization: Constructor University GmbH
+
+Contributors/Editors:
+- Arturo Gomez-Chavez (30.06.2025): [Description of changes]
+
+License: MIT License - See LICENSE.MD file for details
+
+Contact & Support:
+- Email: [support@example.com]
+*/
 
 #include "softDescriptorRegistration.h"
 
@@ -193,6 +206,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoPCL2D(pcl::PointClo
 
 
     //calc Voxel registration
+    int _bestSolutionIndex = -1; // This will be set to the index of the best solution found
     Eigen::Matrix4d estimatedTransformation = this->registrationOfTwoVoxelsSOFTFast(voxelData1Input,
                                                                                     voxelData2Input,
                                                                                     initialGuess,
@@ -200,6 +214,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoPCL2D(pcl::PointClo
                                                                                     useInitialTranslation,
                                                                                     cellSize,
                                                                                     outputDir,
+                                                                                    _bestSolutionIndex,
                                                                                     debug);
     free(voxelData1Input);
     free(voxelData2Input);
@@ -240,42 +255,31 @@ softDescriptorRegistration::softRegistrationVoxel2DListOfPossibleRotations(doubl
     double maximumScan2 = this->getSpectrumFromVoxelData2D(voxelData2Input, this->magnitude2,
                                                            this->phase2, false);
 
+    // Data collection structure for CSV output
+    struct CSVData {
+        std::vector<double> magnitudeFFTW1;
+        std::vector<double> phaseFFTW1;
+        std::vector<double> voxelDataFFTW1;
+        std::vector<double> magnitudeFFTW2;
+        std::vector<double> phaseFFTW2;
+        std::vector<double> voxelDataFFTW2;
+        std::vector<double> resampledVoxel1;
+        std::vector<double> resampledVoxel2;
+        std::vector<double> resultingCorrelation1D;
+    } csvData;
 
     if (debug) {
-        std::ofstream myFile1, myFile2, myFile3, myFile4, myFile5, myFile6;
-        myFile1.open(
-                outputDir + "/magnitudeFFTW1.csv");
-        myFile2.open(outputDir + "/phaseFFTW1.csv");
-        myFile3.open(
-                outputDir + "/voxelDataFFTW1.csv");
-        myFile4.open(
-                outputDir + "/magnitudeFFTW2.csv");
-        myFile5.open(outputDir + "/phaseFFTW2.csv");
-        myFile6.open(
-                outputDir + "/voxelDataFFTW2.csv");
+        // Collect data for CSV output instead of writing separate files
         for (int j = 0; j < N; j++) {
             for (int i = 0; i < N; i++) {
-                myFile1 << magnitude1[j + N * i]; // real part
-                myFile1 << "\n";
-                myFile2 << phase1[j + N * i]; // imaginary part
-                myFile2 << "\n";
-                myFile3 << voxelData1Input[j + N * i]; // imaginary part
-                myFile3 << "\n";
-                myFile4 << magnitude2[j + N * i]; // real part
-                myFile4 << "\n";
-                myFile5 << phase2[j + N * i]; // imaginary part
-                myFile5 << "\n";
-                myFile6 << voxelData2Input[j + N * i]; // imaginary part
-                myFile6 << "\n";
+                csvData.magnitudeFFTW1.push_back(magnitude1[j + N * i]);
+                csvData.phaseFFTW1.push_back(phase1[j + N * i]);
+                csvData.voxelDataFFTW1.push_back(voxelData1Input[j + N * i]);
+                csvData.magnitudeFFTW2.push_back(magnitude2[j + N * i]);
+                csvData.phaseFFTW2.push_back(phase2[j + N * i]);
+                csvData.voxelDataFFTW2.push_back(voxelData2Input[j + N * i]);
             }
         }
-
-        myFile1.close();
-        myFile2.close();
-        myFile3.close();
-        myFile4.close();
-        myFile5.close();
-        myFile6.close();
     }
 
     double globalMaximumMagnitude;
@@ -342,24 +346,14 @@ softDescriptorRegistration::softRegistrationVoxel2DListOfPossibleRotations(doubl
         }
     }
 
-
     if (debug) {
-        std::ofstream myFile7, myFile8;
-        myFile7.open(
-                outputDir + "/resampledVoxel1.csv");
-        myFile8.open(
-                outputDir + "/resampledVoxel2.csv");
-
+        // Collect resampled data for CSV output
         for (int j = 0; j < N; j++) {
             for (int k = 0; k < N; k++) {
-                myFile7 << resampledMagnitudeSO3_1[j + k * bandwidth * 2]; // real part
-                myFile7 << "\n";
-                myFile8 << resampledMagnitudeSO3_2[j + k * bandwidth * 2]; // real part
-                myFile8 << "\n";
+                csvData.resampledVoxel1.push_back(resampledMagnitudeSO3_1[j + k * bandwidth * 2]);
+                csvData.resampledVoxel2.push_back(resampledMagnitudeSO3_2[j + k * bandwidth * 2]);
             }
         }
-        myFile7.close();
-        myFile8.close();
     }
 
     //use SOFT descriptor to calculate the correlation
@@ -413,17 +407,12 @@ softDescriptorRegistration::softRegistrationVoxel2DListOfPossibleRotations(doubl
     angleList.push_back((float) currentAverageAngle);
 
     if (debug) {
-        std::ofstream myFile9;
-        myFile9.open(
-                outputDir + "/resultingCorrelation1D.csv");
-
+        // Collect correlation data for CSV output
         for (int i = 0; i < correlationAveraged.size(); i++) {
-            myFile9 << correlationAveraged[i]; // real part
-            myFile9 << "\n";
-
+            csvData.resultingCorrelation1D.push_back(correlationAveraged[i]);
         }
-        myFile9.close();
     }
+
     //find peaks:
     //rotate to lowest position of 1d array
     //find peaks
@@ -450,6 +439,52 @@ softDescriptorRegistration::softRegistrationVoxel2DListOfPossibleRotations(doubl
 
     for (int i = 0; i < out.size(); i++) {
         returnVectorWithAngles.push_back(angleList[out[i]]);
+    }
+
+    // Write collected data to single CSV file if debug is enabled
+    if (debug) {
+        std::ofstream csvFile;
+        csvFile.open(outputDir + "/rotation_analysis_results.csv");
+        
+        // Write header
+        csvFile << "magnitudeFFTW1,phaseFFTW1,voxelDataFFTW1,magnitudeFFTW2,phaseFFTW2,voxelDataFFTW2,resampledVoxel1,resampledVoxel2,resultingCorrelation1D\n";
+        
+        // Find maximum length among all vectors
+        size_t maxLength = std::max({
+            csvData.magnitudeFFTW1.size(),
+            csvData.phaseFFTW1.size(),
+            csvData.voxelDataFFTW1.size(),
+            csvData.magnitudeFFTW2.size(),
+            csvData.phaseFFTW2.size(),
+            csvData.voxelDataFFTW2.size(),
+            csvData.resampledVoxel1.size(),
+            csvData.resampledVoxel2.size(),
+            csvData.resultingCorrelation1D.size()
+        });
+        
+        // Write data rows
+        for (size_t i = 0; i < maxLength; i++) {
+            csvFile << (i < csvData.magnitudeFFTW1.size() ? std::to_string(csvData.magnitudeFFTW1[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.phaseFFTW1.size() ? std::to_string(csvData.phaseFFTW1[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.voxelDataFFTW1.size() ? std::to_string(csvData.voxelDataFFTW1[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.magnitudeFFTW2.size() ? std::to_string(csvData.magnitudeFFTW2[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.phaseFFTW2.size() ? std::to_string(csvData.phaseFFTW2[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.voxelDataFFTW2.size() ? std::to_string(csvData.voxelDataFFTW2[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.resampledVoxel1.size() ? std::to_string(csvData.resampledVoxel1[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.resampledVoxel2.size() ? std::to_string(csvData.resampledVoxel2[i]) : "");
+            csvFile << ",";
+            csvFile << (i < csvData.resultingCorrelation1D.size() ? std::to_string(csvData.resultingCorrelation1D[i]) : "");
+            csvFile << "\n";
+        }
+        
+        csvFile.close();
     }
 
     return returnVectorWithAngles;
@@ -561,12 +596,21 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
                                                                             bool useInitialTranslation,
                                                                             double cellSize,
                                                                             std::string outputDir,
+                                                                            int& bestSolutionIndex,
                                                                             bool debug) {
 
 
     std::vector<Eigen::Matrix4d> listOfTransformations;
     std::vector<double> maximumHeightPeakList;
     std::vector<double> estimatedAngles;
+    
+    // Data collection structure for CSV output
+    struct CSVData {
+        std::vector<std::vector<double>> resultingCorrelationShift; // Multiple correlation shift matrices
+        std::vector<std::vector<double>> resultVoxel1; // Multiple result voxels
+        std::vector<std::vector<double>> resultVoxel2; // Multiple result voxels
+    } csvData;
+    
     //calculate array of possible angle registrations. With an initial guess, one is choosen (thereofre list.size =1)
     if (useInitialAngle) {
         double goodGuessAlpha = std::atan2(initialGuess(1, 0), initialGuess(0, 0));
@@ -597,6 +641,7 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
 
         //rotating first image to calculate correlation next
         cv::Point2f pc(magTMP1.cols / 2., magTMP1.rows / 2.);
+        std::cout << "ESTIMATED ANGLE:" << estimatedAngle << std::endl;
         cv::Mat r = cv::getRotationMatrix2D(pc, estimatedAngle * 180.0 / M_PI, 1.0);
         cv::warpAffine(magTMP1, magTMP1, r, magTMP1.size());
 
@@ -615,6 +660,10 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
         estimatedRotationScans(1, 3) = translation.y();
         estimatedRotationScans(2, 3) = 0;
         estimatedRotationScans(3, 3) = 1;
+        // Inverse transformation, NOT SURE WHY NEED TO CALCUALTE THE INVERSE AN SAVE BACk
+        Eigen::Matrix4d estimatedRotationScans1To2 = estimatedRotationScans.inverse();
+        estimatedRotationScans(0, 3) = - estimatedRotationScans1To2(1, 3);
+        estimatedRotationScans(1, 3) = - estimatedRotationScans1To2(0, 3);
 
         //transformation and peak height of correlation added to list.
         listOfTransformations.push_back(estimatedRotationScans);
@@ -622,21 +671,17 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
 
 
         if (debug) {
-            std::ofstream myFile10;
-            myFile10.open(
-                    outputDir + "/resultingCorrelationShift" +
-                    std::to_string(angleIndex) + ".csv");
-
+            // Collect correlation shift data
+            std::vector<double> correlationShiftData;
             for (int j = 0; j < N; j++) {
                 for (int i = 0; i < N; i++) {
-                    myFile10 << resultingCorrelationDouble[j + N * i];
-                    myFile10 << "\n";
+                    correlationShiftData.push_back(resultingCorrelationDouble[j + N * i]);
                 }
             }
-            myFile10.close();
+            csvData.resultingCorrelationShift.push_back(correlationShiftData);
 
-            Eigen::Matrix4d estimatedRotationScans1To2 = estimatedRotationScans.inverse();
-
+            // Apply transformation for result voxels
+            //Eigen::Matrix4d estimatedRotationScans1To2 = estimatedRotationScans.inverse();
 
             cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1,
                     0,
@@ -644,27 +689,21 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
                     0,
                     1,
                     estimatedRotationScans1To2(0, 3));
-
+            
+            std::cout << "*** TRANS_MAT:" << trans_mat << std::endl;
 
             warpAffine(magTMP2, magTMP2, trans_mat, magTMP2.size());
-            std::ofstream myFile1, myFile2;
-            myFile1.open(
-                    outputDir + "/resultVoxel1" +
-                    std::to_string(angleIndex) + ".csv");
-            myFile2.open(
-                    outputDir + "/resultVoxel2" +
-                    std::to_string(angleIndex) + ".csv");
+            
+            // Collect result voxel data
+            std::vector<double> resultVoxel1Data, resultVoxel2Data;
             for (int j = 0; j < this->N; j++) {
                 for (int i = 0; i < this->N; i++) {
-                    myFile1 << voxelData1[j + this->N * i]; // real part
-                    myFile1 << "\n";
-                    myFile2 << voxelData2[j + this->N * i]; // imaginary part
-                    myFile2 << "\n";
+                    resultVoxel1Data.push_back(voxelData1[j + this->N * i]);
+                    resultVoxel2Data.push_back(voxelData2[j + this->N * i]);
                 }
             }
-            myFile1.close();
-            myFile2.close();
-
+            csvData.resultVoxel1.push_back(resultVoxel1Data);
+            csvData.resultVoxel2.push_back(resultVoxel2Data);
         }
         angleIndex++;
     }
@@ -674,17 +713,108 @@ Eigen::Matrix4d softDescriptorRegistration::registrationOfTwoVoxelsSOFTFast(doub
     long distanceToMaxElement = std::distance(maximumHeightPeakList.begin(), minmax);
 
     if (debug) {
-        std::ofstream myFile12;
-        myFile12.open(outputDir + "/dataForReadIn.csv");
+        // Write transformation matrices to separate CSV file (all solutions)
+        std::ofstream transformationFile;
+        transformationFile.open(outputDir + "/registration_solutions_transformation.csv");
+        
+        // Write transformation matrix header
+        transformationFile << "r11,r12,r13,tx,r21,r22,r23,ty,r31,r32,r33,tz,h41,h42,h43,h44\n";
+        
+        // Write each transformation matrix as a row
+        for (const auto& transformation : listOfTransformations) {
+            transformationFile << transformation(0,0) << "," << transformation(0,1) << "," << transformation(0,2) << "," << transformation(0,3) << ",";
+            transformationFile << transformation(1,0) << "," << transformation(1,1) << "," << transformation(1,2) << "," << transformation(1,3) << ",";
+            transformationFile << transformation(2,0) << "," << transformation(2,1) << "," << transformation(2,2) << "," << transformation(2,3) << ",";
+            transformationFile << transformation(3,0) << "," << transformation(3,1) << "," << transformation(3,2) << "," << transformation(3,3) << "\n";
+        }
+        transformationFile.close();
 
-        myFile12 << maximumHeightPeakList.size();//number of possible solutions
-        myFile12 << "\n";
-        myFile12 << distanceToMaxElement;//best Solution
-        myFile12 << "\n";
-
-        myFile12.close();
-
+        // Write all collected data to single CSV file
+        std::ofstream csvFile;
+        csvFile.open(outputDir + "/registration_logs.csv");
+        
+        // Build header dynamically
+        std::vector<std::string> headers;
+        headers.push_back("numberOfSolutions");
+        headers.push_back("indexOfBestSolution");
+        
+        // Add headers for correlation shift matrices
+        for (int i = 0; i < csvData.resultingCorrelationShift.size(); i++) {
+            headers.push_back("resultingCorrelationShift" + std::to_string(i));
+        }
+        
+        // Add headers for result voxels
+        for (int i = 0; i < csvData.resultVoxel1.size(); i++) {
+            headers.push_back("resultVoxel1" + std::to_string(i));
+            headers.push_back("resultVoxel2" + std::to_string(i));
+        }
+        
+        // Write header
+        for (size_t i = 0; i < headers.size(); i++) {
+            csvFile << headers[i];
+            if (i < headers.size() - 1) csvFile << ",";
+        }
+        csvFile << "\n";
+        
+        // Find maximum length among all vectors
+        size_t maxLength = 1; // At least 1 for the scalar values
+        for (const auto& vec : csvData.resultingCorrelationShift) {
+            maxLength = std::max(maxLength, vec.size());
+        }
+        for (const auto& vec : csvData.resultVoxel1) {
+            maxLength = std::max(maxLength, vec.size());
+        }
+        for (const auto& vec : csvData.resultVoxel2) {
+            maxLength = std::max(maxLength, vec.size());
+        }
+        
+        // Write data rows
+        for (size_t row = 0; row < maxLength; row++) {
+            // numberOfSolutions column (only in first row)
+            csvFile << (row == 0 ? std::to_string(maximumHeightPeakList.size()) : "");
+            csvFile << ",";
+            
+            // indexOfBestSolution column (only in first row)
+            csvFile << (row == 0 ? std::to_string(distanceToMaxElement) : "");
+            csvFile << ",";
+            
+            // resultingCorrelationShift columns
+            for (size_t i = 0; i < csvData.resultingCorrelationShift.size(); i++) {
+                csvFile << (row < csvData.resultingCorrelationShift[i].size() ? 
+                           std::to_string(csvData.resultingCorrelationShift[i][row]) : "");
+                csvFile << ",";
+            }
+            
+            // resultVoxel columns
+            for (size_t i = 0; i < csvData.resultVoxel1.size(); i++) {
+                csvFile << (row < csvData.resultVoxel1[i].size() ? 
+                           std::to_string(csvData.resultVoxel1[i][row]) : "");
+                csvFile << ",";
+                csvFile << (row < csvData.resultVoxel2[i].size() ? 
+                           std::to_string(csvData.resultVoxel2[i][row]) : "");
+                if (i < csvData.resultVoxel1.size() - 1) csvFile << ",";
+            }
+            csvFile << "\n";
+        }
+        
+        csvFile.close();
+    } else {
+        // Write only the best transformation matrix to CSV file
+        std::ofstream transformationFile;
+        transformationFile.open(outputDir + "/registration_solutions_transformation.csv");
+        
+        // Write transformation matrix header
+        transformationFile << "r11,r12,r13,tx,r21,r22,r23,ty,r31,r32,r33,tz,h41,h42,h43,h44\n";
+        
+        // Write only the best transformation matrix
+        const auto& bestTransformation = listOfTransformations[distanceToMaxElement];
+        transformationFile << bestTransformation(0,0) << "," << bestTransformation(0,1) << "," << bestTransformation(0,2) << "," << bestTransformation(0,3) << ",";
+        transformationFile << bestTransformation(1,0) << "," << bestTransformation(1,1) << "," << bestTransformation(1,2) << "," << bestTransformation(1,3) << ",";
+        transformationFile << bestTransformation(2,0) << "," << bestTransformation(2,1) << "," << bestTransformation(2,2) << "," << bestTransformation(2,3) << ",";
+        transformationFile << bestTransformation(3,0) << "," << bestTransformation(3,1) << "," << bestTransformation(3,2) << "," << bestTransformation(3,3) << "\n";
+        transformationFile.close();
     }
 
+    bestSolutionIndex = (int) distanceToMaxElement;
     return listOfTransformations[distanceToMaxElement];//robot transformation matrix from 1 to 2
 }

@@ -1,0 +1,41 @@
+services:
+  fourier-sof-2d:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    image: ubuntu-pcl-dev:20.04
+    container_name: fourier-sof-2d
+    ports:
+      - "8090:8080"  # For FastAPI
+    volumes:
+      # Mount input files directory (PCD files, images, etc.)
+      - ./input:/workspace/input
+      # Mount output directory (CSV files, processed images, etc.)
+      - ./output:/workspace/output
+    working_dir: /workspace
+    # Keep container running for interactive development
+    stdin_open: true
+    tty: true
+
+    # Health check configuration (optional override of Dockerfile HEALTHCHECK)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Optional: Set environment variables
+    # environment:
+    #  - DISPLAY=${DISPLAY:-:0}
+    # Optional: For GUI applications (uncomment if needed)
+    # network_mode: host
+    # volumes:
+    #   - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    #   - ${HOME}/.Xauthority:/root/.Xauthority:rw
+    
+    # Restart policy
+    restart: unless-stopped
